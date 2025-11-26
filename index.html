@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GA-Arcade – Arkanoid GA</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>GA-Arcade – Arkanoid</h1>
+
+    <div id="top-panel">
+        <button id="btnStart">Start</button>
+        <button id="btnPause">Pause/Resume</button>
+        <button id="btnReset">Reset</button>
+
+        <span id="scoreLabel">
+            Score: <span id="scoreValue">0</span>
+        </span>
+
+        <span id="livesLabel">
+            Lives: <span id="livesValue">3</span>
+        </span>
+    </div>
+
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+    <!-- Cargamos el JS al final del body -->
+    <script src="js/game.js"></script>
+</body>
+</html>
