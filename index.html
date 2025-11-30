@@ -2,16 +2,17 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>GA-Arcade – Arkanoid GA</title>
+    <title>Arkanoid con algoritmo genetico </title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>GA-Arcade – Arkanoid</h1>
+    <h1>Arkanoid con algoritmo genetico! </h1>
 
     <div id="top-panel">
         <button id="btnStart">Start</button>
-        <button id="btnPause">Pause/Resume</button>
+        <button id="btnPause" disabled>Pause/Resume</button> <!-- lo activamos despues de empezar a jugar-->
         <button id="btnReset">Reset</button>
+        <button id="btnProbarAlgoritmo">Probar Algoritmo</button>
 
         <span id="scoreLabel">
             Score: <span id="scoreValue">0</span>
@@ -25,6 +26,6 @@
     <canvas id="gameCanvas" width="480" height="640"></canvas>
 
     <!-- Cargamos el JS al final del body -->
-    <script src="js/game.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>
