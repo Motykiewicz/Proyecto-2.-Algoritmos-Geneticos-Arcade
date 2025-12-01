@@ -85,8 +85,9 @@ function decidirAccion(genoma, features) {
 // Entorno de simulación interno
 // -------------------------------
 
-// Crea una copia local de barra, bola y ladrillos para probar un individuo
-function crearEntornoSimulado() {
+// Crea una copia local de barra, bola y ladrillos para probar un individuo,
+// con un ángulo inicial específico para la bola
+function crearEntornoSimulado(anguloInicial) {
     // Barra simulada
     const barraSim = {
         width: barra.width,
@@ -108,10 +109,9 @@ function crearEntornoSimulado() {
         vy: 0
     };
 
-    // Ángulo inicial fijo hacia arriba-izquierda
-    const angulo = -Math.PI / 4;
-    bolaSim.vx = Math.cos(angulo) * bolaSim.speed;
-    bolaSim.vy = Math.sin(angulo) * bolaSim.speed;
+    // Ángulo inicial configurado
+    bolaSim.vx = Math.cos(anguloInicial) * bolaSim.speed;
+    bolaSim.vy = Math.sin(anguloInicial) * bolaSim.speed;
 
     // Ladrillos simulados (misma grilla que en el juego)
     const bricksSim = [];
@@ -136,15 +136,19 @@ function crearEntornoSimulado() {
     };
 }
 
-// Ejecuta una "partida" simulada para un genoma y devuelve el fitness
-function simularIndividuo(genoma) {
-    const ent = crearEntornoSimulado();
+// Simula una partida con un ángulo inicial concreto y devuelve fitness
+function simularConAngulo(genoma, anguloInicial) {
+    const ent = crearEntornoSimulado(anguloInicial);
 
     let pasos = 0;
     let bricksRotosSim = 0;
     let rebotesEnBarra = 0;
     let sumaDistanciaX = 0;
+    let sumaAltura = 0;
     let vivo = true;
+
+    let pasosDesdeUltimoBrick = 0;
+    let maxPasosSinRomper = 0;
 
     while (pasos < Max_steps && vivo) {
         // 1. Decidir acción según el genoma y el estado
@@ -195,6 +199,8 @@ function simularIndividuo(genoma) {
             rebotesEnBarra++;
         }
 
+        let rompioEnEstePaso = false;
+
         // Ladrillos
         for (const brick of ent.bricks) {
             if (!brick.alive) continue;
@@ -202,8 +208,18 @@ function simularIndividuo(genoma) {
                 brick.alive = false;
                 bricksRotosSim++;
                 ent.bola.vy *= -1;
+                rompioEnEstePaso = true;
                 break;
             }
+        }
+
+        if (rompioEnEstePaso) {
+            if (pasosDesdeUltimoBrick > maxPasosSinRomper) {
+                maxPasosSinRomper = pasosDesdeUltimoBrick;
+            }
+            pasosDesdeUltimoBrick = 0;
+        } else {
+            pasosDesdeUltimoBrick++;
         }
 
         // Si no queda ningún ladrillo, terminamos simulación
@@ -215,25 +231,55 @@ function simularIndividuo(genoma) {
         const barraCentro = ent.barra.x + ent.barra.width / 2;
         sumaDistanciaX += Math.abs(ent.bola.x - barraCentro);
 
+        // Guardamos altura (Y baja = cerca del fondo; Y alta = cerca de ladrillos)
+        sumaAltura += (canvas.height - ent.bola.y); // mayor valor = más alto
+
         pasos++;
     }
 
     const pasosAlcanzados = pasos; // por claridad
     const distPromedio = pasosAlcanzados > 0 ? (sumaDistanciaX / pasosAlcanzados) : canvas.width / 2;
+    const alturaPromedio = pasosAlcanzados > 0 ? (sumaAltura / pasosAlcanzados) : 0;
+
+    if (pasosDesdeUltimoBrick > maxPasosSinRomper) {
+        maxPasosSinRomper = pasosDesdeUltimoBrick;
+    }
 
     // --- FUNCIÓN DE FITNESS ---
-    // Objetivo:
-    //  - Más ladrillos rotos   → mucho mejor.
-    //  - Más rebotes en barra  → mejor (sabe “recoger” la bola).
-    //  - Vivir más pasos        → un poco mejor.
-    //  - Menor distancia media  → mejor (la barra sigue la bola).
-    const fitness =
-        bricksRotosSim * 1000 +          // romper ladrillos vale muchísimo
-        rebotesEnBarra * 200 +           // rebotar la bola en la barra también
-        pasosAlcanzados * 1.0 -          // sobrevivir suma
-        distPromedio * 0.5;              // estar lejos resta
+    //  - Más ladrillos rotos       → mucho mejor.
+    //  - Más rebotes en barra      → mejor.
+    //  - Vivir más pasos           → mejor.
+    //  - Mantener la bola alta     → mejor (cerca de ladrillos).
+    //  - Estar cerca de la bola en X → mejor.
+    //  - Muchos pasos sin romper   → penalización (evita bucles vacíos).
+    const bricksScore   = bricksRotosSim * 1200;
+    const rebotesScore  = rebotesEnBarra * 300;
+    const vidaScore     = pasosAlcanzados * 0.8;
+    const alturaScore   = (alturaPromedio / canvas.height) * 500;
+    const distanciaScore = - (distPromedio / canvas.width) * 400;
+    const estancamientoScore = - (maxPasosSinRomper / Max_steps) * 800;
+
+    const fitness = bricksScore + rebotesScore + vidaScore +
+                    alturaScore + distanciaScore + estancamientoScore;
 
     return fitness;
+}
+
+// Ejecuta una "partida" simulada para un genoma y devuelve fitness medio
+// sobre varios ángulos iniciales para evitar que se sobreajuste a una sola trayectoria
+function simularIndividuo(genoma) {
+    const angulos = [
+        -Math.PI / 4,   // -45°
+        -Math.PI / 3,   // ~ -60°
+        -Math.PI / 6    // ~ -30°
+    ];
+
+    let total = 0;
+    for (const ang of angulos) {
+        total += simularConAngulo(genoma, ang);
+    }
+
+    return total / angulos.length;
 }
 
 // -------------------------------
