@@ -6,19 +6,19 @@ console.log("game.js cargado, canvas:", canvas);
 
 // FPS objetivo alrededor de 60, pero usamos requestAnimationFrame
 const MAX_DT = 1 / 30;
-let backgroundPattern = null 
+let backgroundPattern = null;
 
-
-juegoAutomatico = false; 
+juegoAutomatico = false;
 populationSize = 100;
 N_Generations = 1000;
 MutationRate = 0.05;
 Max_steps = 100;
 bricksRotos = 0;
-//individuo = [h1,h2,h3,h4,h5,h6] // hace falta definir los valores a evaluar
-// por ejemplo h1 = distancia entre el centro de la barra y la bola en x
-// y h2 puede ser la velocidad de la bola en y
-// barra 
+
+// velocidad base de la bola
+const VELOCIDAD_INICIAL_BOLA = 400;
+
+// barra
 const barra = {
     width: 80,
     height: 12,
@@ -35,7 +35,7 @@ const bola = {
     y: 0,
     vx: 0,
     vy: 0,
-    speed: 400
+    speed: VELOCIDAD_INICIAL_BOLA
 };
 
 // Ladrillos
@@ -57,39 +57,36 @@ let lives = 3;
 let gameRunning = false;
 let lastTimestamp = 0;
 
-// para crear el fondo (background) del juego para que se parezca al juego original 
-function createBG(){
+// para crear el fondo (background) del juego para que se parezca al juego original
+function createBG() {
     const off = document.createElement("canvas");
     off.width = 32;
-    off.height = 32; 
+    off.height = 32;
     const figuras = off.getContext("2d");
 
     figuras.fillStyle = "#002b80";
-    figuras.fillRect(0,0,off.width,off.height);
+    figuras.fillRect(0, 0, off.width, off.height);
 
     figuras.fillStyle = "#195ad1";
     figuras.beginPath();
-    figuras.arc(8,8,6,0, 1.3); // pi por dos para darle la curva 
+    figuras.arc(8, 8, 6, 0, 1.3);
     figuras.fill();
 
     figuras.beginPath();
-    figuras.arc(24,24,6,0,1.3); 
+    figuras.arc(24, 24, 6, 0, 1.3);
     figuras.fill();
 
-    figuras.fillStyle = "#00162d"
+    figuras.fillStyle = "#00162d";
     figuras.beginPath();
-    figuras.arc(24,8,12,0,1.3);
+    figuras.arc(24, 8, 12, 0, 1.3);
     figuras.fill();
 
     figuras.beginPath();
-    figuras.arc(8,24,4,0,1.3);
+    figuras.arc(8, 24, 4, 0, 1.3);
     figuras.fill();
 
-    backgroundPattern = ctx.createPattern(off,"repeat");
+    backgroundPattern = ctx.createPattern(off, "repeat");
 }
-
-
-
 
 // Inicializacion del juego
 function init() {
@@ -102,6 +99,9 @@ function init() {
 function resetGame() {
     score = 0;
     lives = 3;
+    bricksRotos = 0;                         // reset contador de ladrillos
+    bola.speed = VELOCIDAD_INICIAL_BOLA;     // reset velocidad base
+
     document.getElementById("scoreValue").textContent = score;
     document.getElementById("livesValue").textContent = lives;
 
@@ -144,10 +144,9 @@ function initBricks() {
     }
 }
 
-
 // Entradas
 let leftArrowPressed = false;
-let rightArrowPressed = false; 
+let rightArrowPressed = false;
 const btnStart = document.getElementById("btnStart");
 const btnPause = document.getElementById("btnPause");
 const btnReset = document.getElementById("btnReset");
@@ -157,9 +156,7 @@ function setupEventListeners() {
     document.addEventListener("keydown", (e) => {
         if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
             leftArrowPressed = true;
-        }
-
-        else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
             rightArrowPressed = true;
         }
         actualizarDireccionBarra();
@@ -168,11 +165,11 @@ function setupEventListeners() {
     document.addEventListener("keyup", (e) => {
         if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
             leftArrowPressed = false;
-        } 
+        }
         if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
             rightArrowPressed = false;
         }
-        actualizarDireccionBarra();    
+        actualizarDireccionBarra();
     });
 
     btnStart.addEventListener("click", () => {
@@ -182,7 +179,7 @@ function setupEventListeners() {
     });
 
     btnPause.addEventListener("click", () => {
-        if (btnPause.disabled) return; 
+        if (btnPause.disabled) return;
         gameRunning = !gameRunning;
     });
 
@@ -191,7 +188,7 @@ function setupEventListeners() {
         btnPause.disabled = true;
     });
 
-     btnProbarAlgoritmo.addEventListener("click", () => {
+    btnProbarAlgoritmo.addEventListener("click", () => {
         juegoAutomatico = true;
         gameRunning = true;
         btnPause.disabled = false;
@@ -205,9 +202,8 @@ function actualizarDireccionBarra() {
         barra.dir = 1;
     } else {
         barra.dir = 0;
-    }       
+    }
 }
-
 
 // Bucle de juego
 function gameLoop(timestamp) {
@@ -225,25 +221,21 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-
-// Lógica del juego 
+// Lógica del juego
 function update(dt) {
     // Mover barra
-    if(juegoAutomatico){
+    if (juegoAutomatico) {
         const barracenter = barra.x + barra.width / 2;
         const objetivoX = bola.x;
 
-        if(objetivoX < barracenter - 5){
+        if (objetivoX < barracenter - 5) {
             barra.dir = -1;
-        }
-        else if(objetivoX > barracenter + 5){
+        } else if (objetivoX > barracenter + 5) {
             barra.dir = 1;
-        }
-        else{
+        } else {
             barra.dir = 0;
         }
     }
-
 
     barra.x += barra.dir * barra.speed * dt;
 
@@ -283,6 +275,9 @@ function handleCollisions() {
         if (lives <= 0) {
             gameOver();
         } else {
+            // al perder vida, volvemos a la velocidad base
+            bola.speed = VELOCIDAD_INICIAL_BOLA;
+            bricksRotos = 0; // opcional: reset progresión de aceleración
             resetBarra();
             resetBola();
         }
@@ -307,6 +302,7 @@ function handleCollisions() {
             score += 10;
             bricksRotos++;
 
+            // cada 10 ladrillos, se acelera, pero ahora se reinicia entre vidas/partidas
             if (bricksRotos % 10 === 0) {
                 bola.speed *= 1.2;
                 const dir = Math.atan2(bola.vy, bola.vx);
@@ -346,10 +342,7 @@ function gameOver() {
     resetGame();
 }
 
-
 // Dibujado
-
-
 function draw() {
     if (backgroundPattern) {
         ctx.fillStyle = backgroundPattern;
@@ -358,7 +351,7 @@ function draw() {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-    
+
     // barra
     ctx.fillStyle = "#0f0";
     ctx.fillRect(barra.x, barra.y, barra.width, barra.height);
@@ -378,6 +371,5 @@ function draw() {
     }
 }
 
-
-// iniciamos el juego 
+// iniciamos el juego
 init();
