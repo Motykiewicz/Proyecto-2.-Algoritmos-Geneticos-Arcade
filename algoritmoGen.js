@@ -25,12 +25,8 @@ let GA_FPS = 60;
 let EpisodiosPorIndividuo = 1;
 let GA_tamanoTorneo = 3;
 
-// -------------------------------
-// Semilla y RNG del GA (opcional)
-// -------------------------------
 
-// Si quieres reproducibilidad, puedes hacer desde consola:
-//   USE_SEEDED_RNG = true; GA_SEED = 12345;
+// Semilla y RNG del GA
 let USE_SEEDED_RNG = true; 
 let GA_SEED = 12345 >>> 0;
 
@@ -47,13 +43,13 @@ function gaRandom() {
 
 // Se leen los parametros desde la interfaz 
 function leerParametrosDesdeUI() {
-    const popInput   = document.getElementById("inputPopulation");
-    const genInput   = document.getElementById("inputGenerations");
-    const mutInput   = document.getElementById("inputMut");
-    const seedInput  = document.getElementById("inputSeed");
-    const fpsInput   = document.getElementById("inputFPS");
-    const epInput    = document.getElementById("inputEpisodes");
-    const selInput   = document.getElementById("inputSel");
+    const popInput = document.getElementById("inputPopulation");
+    const genInput = document.getElementById("inputGenerations");
+    const mutInput = document.getElementById("inputMut");
+    const seedInput = document.getElementById("inputSeed");
+    const fpsInput = document.getElementById("inputFPS");
+    const epInput = document.getElementById("inputEpisodes");
+    const selInput = document.getElementById("inputSel");
     const crossInput = document.getElementById("inputCross");
 
     if (popInput) {
@@ -162,10 +158,8 @@ const updateOriginal = window.update;
 
 
 
-// -------------------------------
-// Representación del individuo
-// -------------------------------
 
+// representacion del individuo
 // Crea un individuo con genes aleatorios en [-1, 1]
 function crearGenomaAleatorio() {
     const genes = [];
@@ -175,7 +169,7 @@ function crearGenomaAleatorio() {
     return { genes, fitness: 0 };
 }
 
-// Features desde entorno simulado (para evaluación)
+// atributos/features desde entorno simulado para la evaluacion
 function obtenerFeaturesDesdeEntorno(ent) {
     const barraCentro = ent.barra.x + ent.barra.width / 2;
 
@@ -188,7 +182,7 @@ function obtenerFeaturesDesdeEntorno(ent) {
     return [dx, dy, vx, vy, 1]; // 1 = bias
 }
 
-// Features desde el juego real (para controlar la barra en pantalla)
+// features desde el juego real , controlar la barra de forma automatica 
 function obtenerFeaturesDesdeJuego() {
     const barraCentro = barra.x + barra.width / 2;
 
@@ -201,7 +195,7 @@ function obtenerFeaturesDesdeJuego() {
     return [dx, dy, vx, vy, 1];
 }
 
-// Política lineal: signo(w · x)
+// poltca lineal: signo(w · x)
 function decidirAccion(genoma, features) {
     let suma = 0;
     for (let i = 0; i < genoma.length; i++) {
@@ -214,10 +208,8 @@ function decidirAccion(genoma, features) {
     return 0;                       // quieto
 }
 
-// -------------------------------
-// Entorno de simulación interno
-// -------------------------------
 
+// Entorno de simulacion interno
 // Crea una copia local de barra, bola y ladrillos para probar un individuo
 function crearEntornoSimulado() {
     // Barra simulada
@@ -241,12 +233,12 @@ function crearEntornoSimulado() {
         vy: 0
     };
 
-    // Ángulo inicial fijo hacia arriba-izquierda
+    // angulo inicial fijo hacia arriba-izquierda
     const angulo = -Math.PI / 4;
     bolaSim.vx = Math.cos(angulo) * bolaSim.speed;
     bolaSim.vy = Math.sin(angulo) * bolaSim.speed;
 
-    // Ladrillos simulados (misma grilla que en el juego)
+    // ladrillos simulados (mismo grid que en el juego)
     const bricksSim = [];
     for (let row = 0; row < brickConfig.rows; row++) {
         for (let col = 0; col < brickConfig.cols; col++) {
@@ -269,10 +261,7 @@ function crearEntornoSimulado() {
     };
 }
 
-// -------------------------------
-// FUNCIÓN DE FITNESS
-// -------------------------------
-
+// FUNCION DE FITNESS!
 // Ejecuta uno o varios episodios simulados para un genoma y devuelve el fitness
 function simularIndividuo(genoma) {
     let fitnessTotal = 0;
@@ -289,24 +278,23 @@ function simularIndividuo(genoma) {
         let vivo = true;
 
         while (pasos < Max_steps && vivo) {
-            // 1. Decidir acción según el genoma y el estado
+            // primero decidimos la accion que va a tomar segun el estado y genoma 
             const features = obtenerFeaturesDesdeEntorno(ent);
             const accion = decidirAccion(genoma, features);
 
-            // 2. Mover barra simulada
+            // luego movemos el entorno simulado segun la accion tomada
             ent.barra.x += accion * ent.barra.speed * DT_SIM;
             if (ent.barra.x < 0) ent.barra.x = 0;
             if (ent.barra.x + ent.barra.width > canvas.width) {
                 ent.barra.x = canvas.width - ent.barra.width;
             }
 
-            // 3. Mover bola simulada
+            // movemos la bola
             ent.bola.x += ent.bola.vx * DT_SIM;
             ent.bola.y += ent.bola.vy * DT_SIM;
 
-            // 4. Colisiones (versión simplificada de tu lógica)
-
-            // Paredes laterales
+            // luego sigue la parte de colisiones igual que en el juego real
+            // paredes laterales
             if (ent.bola.x - ent.bola.radius < 0) {
                 ent.bola.x = ent.bola.radius;
                 ent.bola.vx *= -1;
@@ -315,18 +303,18 @@ function simularIndividuo(genoma) {
                 ent.bola.vx *= -1;
             }
 
-            // Techo
+            // techo
             if (ent.bola.y - ent.bola.radius < 0) {
                 ent.bola.y = ent.bola.radius;
                 ent.bola.vy *= -1;
             }
 
-            // Fondo (pierde)
+            // fondo (cuando pierde una vida)
             if (ent.bola.y - ent.bola.radius > canvas.height) {
                 vivo = false;
             }
 
-            // Barra
+            // la barra
             if (circleIntersectsRect(ent.bola, ent.barra)) {
                 ent.bola.y = ent.barra.y - ent.bola.radius;
                 ent.bola.vy *= -1;
@@ -337,7 +325,7 @@ function simularIndividuo(genoma) {
                 rebotesEnBarra++;
             }
 
-            // Ladrillos
+            // ladrillos
             for (const brick of ent.bricks) {
                 if (!brick.alive) continue;
                 if (circleIntersectsRect(ent.bola, brick)) {
@@ -348,12 +336,12 @@ function simularIndividuo(genoma) {
                 }
             }
 
-            // Si no queda ningún ladrillo, terminamos episodio
+            // Si no queda ningun ladrillo, terminamos episodio
             if (ent.bricks.every(b => !b.alive)) {
                 vivo = false;
             }
 
-            // Distancia horizontal media entre bola y barra
+            // distancia horizontal media entre bola y barra
             const barraCentro = ent.barra.x + ent.barra.width / 2;
             sumaDistanciaX += Math.abs(ent.bola.x - barraCentro);
 
@@ -363,27 +351,25 @@ function simularIndividuo(genoma) {
         const pasosAlcanzados = pasos;
         const distPromedio = pasosAlcanzados > 0 ? (sumaDistanciaX / pasosAlcanzados) : canvas.width / 2;
 
-        const ratioSupervivencia = pasosAlcanzados / Max_steps;   // 0..1
-        const distNorm = distPromedio / canvas.width;             // 0..1 aprox
+        const ratioSupervivencia = pasosAlcanzados / Max_steps;   // ambos son valores entre 0 y 1
+        const distNorm = distPromedio / canvas.width;             // 
 
-        // --- NUEVA FUNCIÓN DE FITNESS ---
+        // calculo del fitness segun los objetivos
         const fitnessEpisodio =
-            bricksRotosSim * 2000 +        // romper ladrillos vale muchísimo
-            rebotesEnBarra * 300 +         // rebotar la bola en la barra también
+            bricksRotosSim * 2000 +        // romper ladrillos vale muchisimo
+            rebotesEnBarra * 300 +         // rebotar la bola en la barra también pero no tanto
             ratioSupervivencia * 1000 -    // sobrevivir más tiempo suma bastante
-            distNorm * 400;                // estar lejos de la bola resta
+            distNorm * 400;                // estar lejos de la bola resta puntos
 
         fitnessTotal += fitnessEpisodio;
     }
 
-    // Promedio sobre episodios
+    // promedio sobre episodios
     return fitnessTotal / episodios;
 }
 
-// -------------------------------
-// Operadores del GA
-// -------------------------------
 
+// operadores del algoritmo genetico
 function evaluarPoblacion(poblacion) {
     for (const ind of poblacion) {
         ind.fitness = simularIndividuo(ind.genes);
@@ -508,7 +494,7 @@ function ejecutarAlgoritmoGenetico() {
         if (etiquetaMejorFitness) etiquetaMejorFitness.textContent = mejor.toFixed(1);
         if (etiquetaFitnessPromedio) etiquetaFitnessPromedio.textContent = prom.toFixed(1);
         if (etiquetaTiempoTotal) etiquetaTiempoTotal.textContent = (tiempoTotal / 1000).toFixed(2) + " s";
-        if (etiquetaTiempoGen) etiquetaTiempoGen.textContent = (tiempoGen).toFixed(2) + " ms";
+        if (etiquetaTiempoGen) etiquetaTiempoGen.textContent = (tiempoGen / 1000).toFixed(2) + " s";
     }
 
     function dibujarGraficoGA() {
@@ -516,57 +502,106 @@ function ejecutarAlgoritmoGenetico() {
         if (!canvas || !mejorFitnessHistorial.length) return;
 
         const ctx = canvas.getContext("2d");
-        const w = canvas.width;
-        const h = canvas.height;
+        const ancho = canvas.width;
+        const alto = canvas.height;
 
-        ctx.clearRect(0, 0, w, h);
+        ctx.clearRect(0, 0, ancho, alto);
         ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, ancho, alto);
 
-        // ejes simples 
-        ctx.strokeStyle = "#444";
-        ctx.beginPath();
-        ctx.moveTo(30, 10);
-        ctx.lineTo(30, h - 20);
-        ctx.lineTo(w - 5, h - 20);
-        ctx.stroke();
+        const margenIzq = 40;
+        const margenDer = 10;
+        const margenSup = 25;
+        const margenInf = 20;
 
-        const gens = mejorFitnessHistorial.length;
+        const totalGeneraciones = mejorFitnessHistorial.length;
         const maxFitness = Math.max(...mejorFitnessHistorial, ...promedioFitnessHistorial);
         const minFitness = Math.min(...mejorFitnessHistorial, ...promedioFitnessHistorial);
-        const rangoFitness = maxFitness - minFitness || 1;
+        const rangoFitness = (maxFitness - minFitness) || 1;
 
-        function dibujarYFitness(valor){
-            const norm = (valor - minFitness) / rangoFitness; 
-            return (h - 20) - norm  *(h - 30);
+        function xParaGeneracion(i) {
+            if (totalGeneraciones === 1) return margenIzq;
+            const anchoUtil = ancho - margenIzq - margenDer;
+            return margenIzq + (i / (totalGeneraciones - 1)) * anchoUtil;
         }
 
-        function dibujarXGen(i){
-            return 30 + (i / Math.max(1, i - 1)) * (w - 40);
-    }
+        function yParaFitness(valor) {
+            const altoUtil = alto - margenSup - margenInf;
+            const normalizado = (valor - minFitness) / rangoFitness; 
+            // 0 = minFitness (abajo), 1 = maxFitness (arriba)
+            return (alto - margenInf) - normalizado * altoUtil;
+        }
         
-        // dibujar el mejor fitneess
-        ctx.strokeStyle = '#00ff88';
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 1;
+        ctx.font = "10px system-ui";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#888";
+
+        const divisiones = 4;
+        for (let i = 0; i <= divisiones; i++) {
+            const t = i / divisiones; // 0..1
+            const y = margenSup + t * (alto - margenSup - margenInf);
+
+            ctx.beginPath();
+            ctx.moveTo(margenIzq, y);
+            ctx.lineTo(ancho - margenDer, y);
+            ctx.stroke();
+
+            const valor = maxFitness - t * rangoFitness;
+            ctx.fillText(valor.toFixed(0), margenIzq - 5, y);
+        }
+
+        // Ejes
+        ctx.strokeStyle = "#555";
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
-        mejorFitnessHistorial.forEach((fit, i) => {
-            const x = dibujarXGen(i);
-            const y = dibujarYFitness(fit);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        });
+        ctx.moveTo(margenIzq, margenSup);
+        ctx.lineTo(margenIzq, alto - margenInf);
+        ctx.lineTo(ancho - margenDer, alto - margenInf);
         ctx.stroke();
 
-        // diujar el fitness promedio 
-        ctx.strokeStyle = '#ffaa00';
+        // lineas de fitness
+        ctx.lineWidth = 2;
+
+
+        // dibujar el mejor fitneess de verde
+        ctx.strokeStyle = "#00ff88";
         ctx.beginPath();
-        promedioFitnessHistorial.forEach((fit, i) => {
-            const x = dibujarXGen(i);
-            const y = dibujarYFitness(fit);
+        for (let i = 0; i < mejorFitnessHistorial.length; i++) {
+            const x = xParaGeneracion(i);
+            const y = yParaFitness(mejorFitnessHistorial[i]);
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
-        });
+        }
         ctx.stroke();
+
+
+
+        // diujar el fitness promedio de naranja
+        ctx.strokeStyle = "#ffaa00";
+        ctx.beginPath();
+        for (let i = 0; i < promedioFitnessHistorial.length; i++) {
+            const x = xParaGeneracion(i);
+            const y = yParaFitness(promedioFitnessHistorial[i]);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        
+        // leyenda
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+
+        ctx.fillStyle = "#00ff88";
+        ctx.fillText("■ Mejor fitness", margenIzq + 5, 5);
+
+        ctx.fillStyle = "#ffaa00";
+        ctx.fillText("■ Fitness promedio", margenIzq + 130, 5);
     }
+    
     tiempoFinalGA = performance.now();
     actualizarMetricasEnInterfaz();
     dibujarGraficoGA();
@@ -588,9 +623,8 @@ function ejecutarAlgoritmoGenetico() {
     console.log("Entrenamiento GA finalizado. Mejor genoma:", gaMejorGenoma);
 }
 
-// -------------------------------
+
 // Enganche con el motor del juego
-// -------------------------------
 
 // Si modoGA=true, la barra se mueve con el mejor genoma
 window.update = function (dt) {
@@ -612,15 +646,11 @@ window.update = function (dt) {
     }
 };
 
-// -------------------------------
-// Botón "Probar Algoritmo"
-// -------------------------------
 
+// Boton "Probar Algoritmo"
 const btnGA = document.getElementById("btnProbarAlgoritmo");
 const btnMejorDemo = document.getElementById("btnMejorDemo");
 const btnDescargarDemo = document.getElementById("btnDescargarDemo");
-
-
 
 if (btnGA) {
     console.log("Enganchando botón Probar Algoritmo al GA");
@@ -665,10 +695,17 @@ function exportBestJson() {
         return;
     }
 
+    // un resumen por generacion 
+    const resumenGeneraciones = mejorFitnessHistorial.map((mejor, i) => {
+        const promedio = promedioFitnessHistorial[i] ?? 0;
+        return `Gen ${i} – mejor fitness: ${mejor.toFixed(2)} - promedio: ${promedio.toFixed(2)}`;
+    });
+
+
     const data = {
         game: "Arkanoid-GA",
         representation: "vector_pesos_lineal",
-        num_genes: NUM_GENES,
+        num_genes: gaMejorGenoma.length,
         genes: gaMejorGenoma,
         ga_params: {
             populationSize,
@@ -683,7 +720,8 @@ function exportBestJson() {
         },
         fitness_history: {
             best: mejorFitnessHistorial,
-            avg: promedioFitnessHistorial
+            avg: promedioFitnessHistorial,
+            resumen_generaciones: resumenGeneraciones
         }
     };
 
