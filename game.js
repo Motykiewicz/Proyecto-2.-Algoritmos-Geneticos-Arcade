@@ -1,3 +1,4 @@
+// game.js
 // las referencias globales
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
@@ -8,12 +9,12 @@ console.log("game.js cargado, canvas:", canvas);
 const MAX_DT = 1 / 30;
 let backgroundPattern = null;
 
-juegoAutomatico = false;
-populationSize = 100;
-N_Generations = 1000;
-MutationRate = 0.05;
-Max_steps = 600;
-bricksRotos = 0;
+let juegoAutomatico = false;
+let populationSize = 100;
+let N_Generations = 1000;
+let MutationRate = 0.05;
+let Max_steps = 600;
+let bricksRotos = 0;
 
 // velocidad base de la bola
 const VELOCIDAD_INICIAL_BOLA = 400;
