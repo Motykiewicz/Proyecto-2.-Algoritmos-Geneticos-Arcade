@@ -12,7 +12,7 @@ console.log("algoritmoGen.js cargado");
 // Cada individuo es un vector de pesos:
 // [w_dx, w_dy, w_vx, w_vy, bias]
 const NUM_GENES = 5;
-const DT_SIM = 1 / 60;
+const DT_SIM = 1 / 60;   // fijo para que la dinámica sea estable
 
 // Si estos valores NO están definidos en game.js, ponemos defaults
 if (typeof populationSize === "undefined") populationSize = 30;
@@ -20,7 +20,132 @@ if (typeof N_Generations === "undefined") N_Generations = 30;
 if (typeof MutationRate === "undefined") MutationRate = 0.05;
 if (typeof Max_steps === "undefined") Max_steps = 400;
 
+// parámetros leídos de la UI (para reporte)
+let selectionPercent     = 10;
+let crossoverPercent     = 85;
+let mutationPercentUI    = 5;
+let GA_FPS               = 60;
+let EpisodiosPorIndividuo = 1;
+
+// -------------------------------
+// Semilla y RNG del GA (opcional)
+// -------------------------------
+
+// Si quieres reproducibilidad, puedes hacer desde consola:
+//   USE_SEEDED_RNG = true; GA_SEED = 12345;
+let USE_SEEDED_RNG = false;
+let GA_SEED = 12345 >>> 0;
+
+// RNG del GA: por defecto usa Math.random()
+function gaRandom() {
+    if (!USE_SEEDED_RNG) {
+        return Math.random();
+    }
+    // LCG simple cuando queremos modo "con semilla"
+    GA_SEED = (1664525 * GA_SEED + 1013904223) >>> 0;
+    return GA_SEED / 0xFFFFFFFF;
+}
+
+// -------------------------------
+// Leer parámetros desde la UI
+// -------------------------------
+
+function leerParametrosDesdeUI() {
+    const popInput   = document.getElementById("inputPopulation");
+    const genInput   = document.getElementById("inputGenerations");
+    const mutInput   = document.getElementById("inputMut");
+    const seedInput  = document.getElementById("inputSeed");
+    const fpsInput   = document.getElementById("inputFPS");
+    const epInput    = document.getElementById("inputEpisodes");
+    const selInput   = document.getElementById("inputSel");
+    const crossInput = document.getElementById("inputCross");
+
+    if (popInput) {
+        const v = parseInt(popInput.value);
+        if (!isNaN(v) && v >= 1) populationSize = v;
+    }
+    if (genInput) {
+        const v = parseInt(genInput.value);
+        if (!isNaN(v) && v >= 1) N_Generations = v;
+    }
+    if (mutInput) {
+        const v = parseFloat(mutInput.value);
+        if (!isNaN(v)) {
+            mutationPercentUI = v;
+            MutationRate = mutationPercentUI / 100.0;  // 5% => 0.05
+        }
+    }
+    if (seedInput) {
+        const v = parseInt(seedInput.value);
+        if (!isNaN(v)) GA_SEED = v >>> 0;
+    }
+    if (fpsInput) {
+        const v = parseInt(fpsInput.value);
+        if (!isNaN(v) && v > 0) GA_FPS = v;
+    }
+    if (epInput) {
+        const v = parseInt(epInput.value);
+        if (!isNaN(v) && v >= 1) EpisodiosPorIndividuo = v;
+    }
+    if (selInput) {
+        const v = parseFloat(selInput.value);
+        if (!isNaN(v)) selectionPercent = v;
+    }
+    if (crossInput) {
+        const v = parseFloat(crossInput.value);
+        if (!isNaN(v)) crossoverPercent = v;
+    }
+
+    console.log(
+        "[GA] Parametros:",
+        "N =", populationSize,
+        "G =", N_Generations,
+        "MutationRate =", MutationRate,
+        "Seed =", GA_SEED,
+        "FPS sim =", GA_FPS,
+        "Episodios/ind =", EpisodiosPorIndividuo,
+        "%Sel =", selectionPercent,
+        "%Cruce =", crossoverPercent
+    );
+}
+
+// Validar que % selección + cruce + mutación sumen 100
+function validarPorcentajes() {
+    const selInput   = document.getElementById("inputSel");
+    const crossInput = document.getElementById("inputCross");
+    const mutInput   = document.getElementById("inputMut");
+    const warning    = document.getElementById("percentWarning");
+    const btnGA      = document.getElementById("btnProbarAlgoritmo");
+
+    if (!selInput || !crossInput || !mutInput || !btnGA) return;
+
+    const sel   = parseFloat(selInput.value)   || 0;
+    const cross = parseFloat(crossInput.value) || 0;
+    const mut   = parseFloat(mutInput.value)   || 0;
+    const total = sel + cross + mut;
+
+    if (Math.abs(total - 100) > 0.01) {
+        warning.textContent = "Los porcentajes deben sumar 100%";
+        btnGA.disabled = true;
+    } else {
+        warning.textContent = "";
+        btnGA.disabled = false;
+    }
+}
+
+// Como este script está al final del body, el DOM ya existe.
+(function initPorcentajes() {
+    ["inputSel", "inputCross", "inputMut"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", validarPorcentajes);
+    });
+    validarPorcentajes();
+})();
+
+// -------------------------------
 // Estado global del GA
+// -------------------------------
+
 let gaMejorGenoma = null;
 let gaEntrenado = false;
 let modoGA = false;
@@ -36,7 +161,7 @@ const updateOriginal = window.update;
 function crearGenomaAleatorio() {
     const genes = [];
     for (let i = 0; i < NUM_GENES; i++) {
-        genes.push(Math.random() * 2 - 1);
+        genes.push(gaRandom() * 2 - 1);
     }
     return { genes, fitness: 0 };
 }
@@ -74,7 +199,6 @@ function decidirAccion(genoma, features) {
         suma += genoma[i] * features[i];
     }
 
-    // Usamos un umbral pequeño: si la suma es muy pequeña, nos quedamos quietos
     const umbral = 0.05;
     if (suma > umbral) return 1;    // mover derecha
     if (suma < -umbral) return -1;  // mover izquierda
@@ -85,9 +209,8 @@ function decidirAccion(genoma, features) {
 // Entorno de simulación interno
 // -------------------------------
 
-// Crea una copia local de barra, bola y ladrillos para probar un individuo,
-// con un ángulo inicial específico para la bola
-function crearEntornoSimulado(anguloInicial) {
+// Crea una copia local de barra, bola y ladrillos para probar un individuo
+function crearEntornoSimulado() {
     // Barra simulada
     const barraSim = {
         width: barra.width,
@@ -109,9 +232,10 @@ function crearEntornoSimulado(anguloInicial) {
         vy: 0
     };
 
-    // Ángulo inicial configurado
-    bolaSim.vx = Math.cos(anguloInicial) * bolaSim.speed;
-    bolaSim.vy = Math.sin(anguloInicial) * bolaSim.speed;
+    // Ángulo inicial fijo hacia arriba-izquierda
+    const angulo = -Math.PI / 4;
+    bolaSim.vx = Math.cos(angulo) * bolaSim.speed;
+    bolaSim.vy = Math.sin(angulo) * bolaSim.speed;
 
     // Ladrillos simulados (misma grilla que en el juego)
     const bricksSim = [];
@@ -136,150 +260,115 @@ function crearEntornoSimulado(anguloInicial) {
     };
 }
 
-// Simula una partida con un ángulo inicial concreto y devuelve fitness
-function simularConAngulo(genoma, anguloInicial) {
-    const ent = crearEntornoSimulado(anguloInicial);
+// -------------------------------
+// FUNCIÓN DE FITNESS
+// -------------------------------
 
-    let pasos = 0;
-    let bricksRotosSim = 0;
-    let rebotesEnBarra = 0;
-    let sumaDistanciaX = 0;
-    let sumaAltura = 0;
-    let vivo = true;
-
-    let pasosDesdeUltimoBrick = 0;
-    let maxPasosSinRomper = 0;
-
-    while (pasos < Max_steps && vivo) {
-        // 1. Decidir acción según el genoma y el estado
-        const features = obtenerFeaturesDesdeEntorno(ent);
-        const accion = decidirAccion(genoma, features);
-
-        // 2. Mover barra simulada
-        ent.barra.x += accion * ent.barra.speed * DT_SIM;
-        if (ent.barra.x < 0) ent.barra.x = 0;
-        if (ent.barra.x + ent.barra.width > canvas.width) {
-            ent.barra.x = canvas.width - ent.barra.width;
-        }
-
-        // 3. Mover bola simulada
-        ent.bola.x += ent.bola.vx * DT_SIM;
-        ent.bola.y += ent.bola.vy * DT_SIM;
-
-        // 4. Colisiones (versión simplificada de tu lógica)
-
-        // Paredes laterales
-        if (ent.bola.x - ent.bola.radius < 0) {
-            ent.bola.x = ent.bola.radius;
-            ent.bola.vx *= -1;
-        } else if (ent.bola.x + ent.bola.radius > canvas.width) {
-            ent.bola.x = canvas.width - ent.bola.radius;
-            ent.bola.vx *= -1;
-        }
-
-        // Techo
-        if (ent.bola.y - ent.bola.radius < 0) {
-            ent.bola.y = ent.bola.radius;
-            ent.bola.vy *= -1;
-        }
-
-        // Fondo (pierde)
-        if (ent.bola.y - ent.bola.radius > canvas.height) {
-            vivo = false;
-        }
-
-        // Barra
-        if (circleIntersectsRect(ent.bola, ent.barra)) {
-            ent.bola.y = ent.barra.y - ent.bola.radius;
-            ent.bola.vy *= -1;
-
-            const hitPos = (ent.bola.x - (ent.barra.x + ent.barra.width / 2)) / (ent.barra.width / 2);
-            ent.bola.vx = hitPos * ent.bola.speed;
-
-            rebotesEnBarra++;
-        }
-
-        let rompioEnEstePaso = false;
-
-        // Ladrillos
-        for (const brick of ent.bricks) {
-            if (!brick.alive) continue;
-            if (circleIntersectsRect(ent.bola, brick)) {
-                brick.alive = false;
-                bricksRotosSim++;
-                ent.bola.vy *= -1;
-                rompioEnEstePaso = true;
-                break;
-            }
-        }
-
-        if (rompioEnEstePaso) {
-            if (pasosDesdeUltimoBrick > maxPasosSinRomper) {
-                maxPasosSinRomper = pasosDesdeUltimoBrick;
-            }
-            pasosDesdeUltimoBrick = 0;
-        } else {
-            pasosDesdeUltimoBrick++;
-        }
-
-        // Si no queda ningún ladrillo, terminamos simulación
-        if (ent.bricks.every(b => !b.alive)) {
-            vivo = false;
-        }
-
-        // Distancia horizontal media entre bola y barra (para penalizar estar lejos)
-        const barraCentro = ent.barra.x + ent.barra.width / 2;
-        sumaDistanciaX += Math.abs(ent.bola.x - barraCentro);
-
-        // Guardamos altura (Y baja = cerca del fondo; Y alta = cerca de ladrillos)
-        sumaAltura += (canvas.height - ent.bola.y); // mayor valor = más alto
-
-        pasos++;
-    }
-
-    const pasosAlcanzados = pasos; // por claridad
-    const distPromedio = pasosAlcanzados > 0 ? (sumaDistanciaX / pasosAlcanzados) : canvas.width / 2;
-    const alturaPromedio = pasosAlcanzados > 0 ? (sumaAltura / pasosAlcanzados) : 0;
-
-    if (pasosDesdeUltimoBrick > maxPasosSinRomper) {
-        maxPasosSinRomper = pasosDesdeUltimoBrick;
-    }
-
-    // --- FUNCIÓN DE FITNESS ---
-    //  - Más ladrillos rotos       → mucho mejor.
-    //  - Más rebotes en barra      → mejor.
-    //  - Vivir más pasos           → mejor.
-    //  - Mantener la bola alta     → mejor (cerca de ladrillos).
-    //  - Estar cerca de la bola en X → mejor.
-    //  - Muchos pasos sin romper   → penalización (evita bucles vacíos).
-    const bricksScore   = bricksRotosSim * 1200;
-    const rebotesScore  = rebotesEnBarra * 300;
-    const vidaScore     = pasosAlcanzados * 0.8;
-    const alturaScore   = (alturaPromedio / canvas.height) * 500;
-    const distanciaScore = - (distPromedio / canvas.width) * 400;
-    const estancamientoScore = - (maxPasosSinRomper / Max_steps) * 800;
-
-    const fitness = bricksScore + rebotesScore + vidaScore +
-                    alturaScore + distanciaScore + estancamientoScore;
-
-    return fitness;
-}
-
-// Ejecuta una "partida" simulada para un genoma y devuelve fitness medio
-// sobre varios ángulos iniciales para evitar que se sobreajuste a una sola trayectoria
+// Ejecuta uno o varios episodios simulados para un genoma y devuelve el fitness
 function simularIndividuo(genoma) {
-    const angulos = [
-        -Math.PI / 4,   // -45°
-        -Math.PI / 3,   // ~ -60°
-        -Math.PI / 6    // ~ -30°
-    ];
+    let fitnessTotal = 0;
 
-    let total = 0;
-    for (const ang of angulos) {
-        total += simularConAngulo(genoma, ang);
+    const episodios = Math.max(1, EpisodiosPorIndividuo);
+
+    for (let ep = 0; ep < episodios; ep++) {
+        const ent = crearEntornoSimulado();
+
+        let pasos = 0;
+        let bricksRotosSim = 0;
+        let rebotesEnBarra = 0;
+        let sumaDistanciaX = 0;
+        let vivo = true;
+
+        while (pasos < Max_steps && vivo) {
+            // 1. Decidir acción según el genoma y el estado
+            const features = obtenerFeaturesDesdeEntorno(ent);
+            const accion = decidirAccion(genoma, features);
+
+            // 2. Mover barra simulada
+            ent.barra.x += accion * ent.barra.speed * DT_SIM;
+            if (ent.barra.x < 0) ent.barra.x = 0;
+            if (ent.barra.x + ent.barra.width > canvas.width) {
+                ent.barra.x = canvas.width - ent.barra.width;
+            }
+
+            // 3. Mover bola simulada
+            ent.bola.x += ent.bola.vx * DT_SIM;
+            ent.bola.y += ent.bola.vy * DT_SIM;
+
+            // 4. Colisiones (versión simplificada de tu lógica)
+
+            // Paredes laterales
+            if (ent.bola.x - ent.bola.radius < 0) {
+                ent.bola.x = ent.bola.radius;
+                ent.bola.vx *= -1;
+            } else if (ent.bola.x + ent.bola.radius > canvas.width) {
+                ent.bola.x = canvas.width - ent.bola.radius;
+                ent.bola.vx *= -1;
+            }
+
+            // Techo
+            if (ent.bola.y - ent.bola.radius < 0) {
+                ent.bola.y = ent.bola.radius;
+                ent.bola.vy *= -1;
+            }
+
+            // Fondo (pierde)
+            if (ent.bola.y - ent.bola.radius > canvas.height) {
+                vivo = false;
+            }
+
+            // Barra
+            if (circleIntersectsRect(ent.bola, ent.barra)) {
+                ent.bola.y = ent.barra.y - ent.bola.radius;
+                ent.bola.vy *= -1;
+
+                const hitPos = (ent.bola.x - (ent.barra.x + ent.barra.width / 2)) / (ent.barra.width / 2);
+                ent.bola.vx = hitPos * ent.bola.speed;
+
+                rebotesEnBarra++;
+            }
+
+            // Ladrillos
+            for (const brick of ent.bricks) {
+                if (!brick.alive) continue;
+                if (circleIntersectsRect(ent.bola, brick)) {
+                    brick.alive = false;
+                    bricksRotosSim++;
+                    ent.bola.vy *= -1;
+                    break;
+                }
+            }
+
+            // Si no queda ningún ladrillo, terminamos episodio
+            if (ent.bricks.every(b => !b.alive)) {
+                vivo = false;
+            }
+
+            // Distancia horizontal media entre bola y barra
+            const barraCentro = ent.barra.x + ent.barra.width / 2;
+            sumaDistanciaX += Math.abs(ent.bola.x - barraCentro);
+
+            pasos++;
+        }
+
+        const pasosAlcanzados = pasos;
+        const distPromedio = pasosAlcanzados > 0 ? (sumaDistanciaX / pasosAlcanzados) : canvas.width / 2;
+
+        const ratioSupervivencia = pasosAlcanzados / Max_steps;   // 0..1
+        const distNorm = distPromedio / canvas.width;             // 0..1 aprox
+
+        // --- NUEVA FUNCIÓN DE FITNESS ---
+        const fitnessEpisodio =
+            bricksRotosSim * 2000 +        // romper ladrillos vale muchísimo
+            rebotesEnBarra * 300 +         // rebotar la bola en la barra también
+            ratioSupervivencia * 1000 -    // sobrevivir más tiempo suma bastante
+            distNorm * 400;                // estar lejos de la bola resta
+
+        fitnessTotal += fitnessEpisodio;
     }
 
-    return total / angulos.length;
+    // Promedio sobre episodios
+    return fitnessTotal / episodios;
 }
 
 // -------------------------------
@@ -298,10 +387,10 @@ function seleccionarPadre(poblacion) {
 
     if (total === 0) {
         // Si todos valen 0, escogemos uno al azar
-        return poblacion[Math.floor(Math.random() * poblacion.length)];
+        return poblacion[Math.floor(gaRandom() * poblacion.length)];
     }
 
-    let r = Math.random() * total;
+    let r = gaRandom() * total;
     for (const ind of poblacion) {
         r -= ind.fitness;
         if (r <= 0) return ind;
@@ -311,14 +400,14 @@ function seleccionarPadre(poblacion) {
 
 function cruzar(p1, p2) {
     const genesHijo = [];
-    const punto = Math.floor(Math.random() * NUM_GENES);
+    const punto = Math.floor(gaRandom() * NUM_GENES);
 
     for (let i = 0; i < NUM_GENES; i++) {
         genesHijo[i] = (i < punto) ? p1.genes[i] : p2.genes[i];
 
         // Mutación
-        if (Math.random() < MutationRate) {
-            genesHijo[i] += (Math.random() * 0.4 - 0.2); // ruido pequeño
+        if (gaRandom() < MutationRate) {
+            genesHijo[i] += (gaRandom() * 0.4 - 0.2); // ruido pequeño
         }
     }
 
@@ -329,10 +418,11 @@ function crearSiguienteGeneracion(poblacion) {
     const ordenada = [...poblacion].sort((a, b) => b.fitness - a.fitness);
     const nueva = [];
 
+    // elitismo clásico: 10% de la población
     const elitismo = Math.max(1, Math.floor(populationSize * 0.1));
 
     // Copiar élites
-    for (let i = 0; i < elitismo; i++) {
+    for (let i = 0; i < elitismo && i < ordenada.length; i++) {
         const copiaGenes = ordenada[i].genes.slice();
         nueva.push({ genes: copiaGenes, fitness: 0 });
     }
@@ -349,7 +439,11 @@ function crearSiguienteGeneracion(poblacion) {
 
 // Ejecuta todo el algoritmo genético y guarda el mejor individuo
 function ejecutarAlgoritmoGenetico() {
+    // 1) Leemos parámetros de la UI (N, G, % mutación, seed, etc.)
+    leerParametrosDesdeUI();
+
     console.log("Iniciando entrenamiento GA...");
+    console.log("USE_SEEDED_RNG =", USE_SEEDED_RNG, "GA_SEED =", GA_SEED);
 
     let poblacion = [];
     for (let i = 0; i < populationSize; i++) {

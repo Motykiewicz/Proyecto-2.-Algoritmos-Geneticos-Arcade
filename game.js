@@ -12,7 +12,7 @@ juegoAutomatico = false;
 populationSize = 100;
 N_Generations = 1000;
 MutationRate = 0.05;
-Max_steps = 100;
+Max_steps = 600;
 bricksRotos = 0;
 
 // velocidad base de la bola
