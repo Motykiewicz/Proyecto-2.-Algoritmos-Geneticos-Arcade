@@ -1,7 +1,13 @@
 // algoritmoGen.js
-
 console.log("algoritmoGen.js cargado");
 
+// digamos el orden seria: 
+// 1. seleccion
+// 2. fitness
+// 3. cruzar al azar 
+// 4. mutar (un individuo nuevo) al azar con cierta probabilidad
+// 5. nueva gen
+// 6. repetir 
 
 // configuración del algoritmo genetico
 
@@ -13,7 +19,7 @@ let DT_SIM = 1 / 60;   // se ajusta con GA_FPS en la interfaz
 
 // ponemos valores defaults por si no estan definidos dentro de game.js 
 if (typeof populationSize === "undefined") populationSize = 30;
-if (typeof N_Generations === "undefined") N_Generations = 30;
+if (typeof N_Generations === "undefined") N_Generations = 60;
 if (typeof MutationRate === "undefined") MutationRate = 0.05;
 if (typeof Max_steps === "undefined") Max_steps = 400;
 
@@ -29,6 +35,7 @@ let GA_tamanoTorneo = 3;
 // Semilla y RNG del GA
 let USE_SEEDED_RNG = true; 
 let GA_SEED = 12345 >>> 0;
+let gaSEED_inicial = GA_SEED;
 
 // funcion random para sacar la semilla del ga 
 function gaRandom() {
@@ -39,6 +46,14 @@ function gaRandom() {
     GA_SEED = (1664525 * GA_SEED + 1013904223) >>> 0;
     return GA_SEED / 0xFFFFFFFF;
 }
+
+function gaussianaRandom() {
+        let u = gaRandom() || 1e-9;
+        let v = gaRandom() || 1e-9;
+        return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+
 
 
 // Se leen los parametros desde la interfaz 
@@ -52,13 +67,15 @@ function leerParametrosDesdeUI() {
     const selInput = document.getElementById("inputSel");
     const crossInput = document.getElementById("inputCross");
 
+    
+
     if (popInput) {
         const v = parseInt(popInput.value);
-        if (!isNaN(v) && v >= 1) populationSize = v;
+        if (!isNaN(v) && v >= 30) populationSize = v;
     }
     if (genInput) {
         const v = parseInt(genInput.value);
-        if (!isNaN(v) && v >= 1) N_Generations = v;
+        if (!isNaN(v) && v >= 60) N_Generations = v;
     }
     if (mutInput) {
         const v = parseFloat(mutInput.value);
@@ -104,6 +121,9 @@ function leerParametrosDesdeUI() {
     );
 }
 
+
+
+
 // validar que el porcentaje de selección + cruce + mutacion sumen 100
 function validarPorcentajes() {
     const selInput = document.getElementById("inputSel");
@@ -142,6 +162,10 @@ function validarPorcentajes() {
 })();
 
 
+
+
+
+
 // Estado global del algoritmo genetico 
 
 let gaMejorGenoma = null;
@@ -152,12 +176,11 @@ let promedioFitnessHistorial = [];
 let tiemposGeneracionHistorial = [];
 let tiempoInicioGA = 0;
 let tiempoFinalGA = 0;
-
-// Guardamos la función update ORIGINAL definida en game.js
-const updateOriginal = window.update;
+const updateOriginal = window.update; // Guardamos la función update ORIGINAL definida en game.js
 
 
 
+// EMPEZAMOS CON EL ALGORITMO GENETICO!
 
 // representacion del individuo
 // Crea un individuo con genes aleatorios en [-1, 1]
@@ -169,7 +192,7 @@ function crearGenomaAleatorio() {
     return { genes, fitness: 0 };
 }
 
-// atributos/features desde entorno simulado para la evaluacion
+// features desde entorno simulado para la evaluacion para el vector de pesos 
 function obtenerFeaturesDesdeEntorno(ent) {
     const barraCentro = ent.barra.x + ent.barra.width / 2;
 
@@ -276,6 +299,8 @@ function simularIndividuo(genoma) {
         let rebotesEnBarra = 0;
         let sumaDistanciaX = 0;
         let vivo = true;
+        let bricksSeguidosSinTocarBarra = 0;
+        let maxBricksSeguidosSinTocarBarra = 0;
 
         while (pasos < Max_steps && vivo) {
             // primero decidimos la accion que va a tomar segun el estado y genoma 
@@ -323,6 +348,7 @@ function simularIndividuo(genoma) {
                 ent.bola.vx = hitPos * ent.bola.speed;
 
                 rebotesEnBarra++;
+                bricksSeguidosSinTocarBarra = 0;
             }
 
             // ladrillos
@@ -332,6 +358,11 @@ function simularIndividuo(genoma) {
                     brick.alive = false;
                     bricksRotosSim++;
                     ent.bola.vy *= -1;
+
+                    bricksSeguidosSinTocarBarra++;
+                    if (bricksSeguidosSinTocarBarra > maxBricksSeguidosSinTocarBarra) {
+                        maxBricksSeguidosSinTocarBarra = bricksSeguidosSinTocarBarra;
+                    }
                     break;
                 }
             }
@@ -357,9 +388,10 @@ function simularIndividuo(genoma) {
         // calculo del fitness segun los objetivos
         const fitnessEpisodio =
             bricksRotosSim * 2000 +        // romper ladrillos vale muchisimo
-            rebotesEnBarra * 300 +         // rebotar la bola en la barra también pero no tanto
-            ratioSupervivencia * 1000 -    // sobrevivir más tiempo suma bastante
-            distNorm * 400;                // estar lejos de la bola resta puntos
+            rebotesEnBarra * 400 +         // rebotar la bola en la barra también pero no tanto
+            ratioSupervivencia * 3000 -    // sobrevivir más tiempo suma bastante
+            distNorm * 600 +                // estar lejos de la bola resta puntos
+            maxBricksSeguidosSinTocarBarra * 500; // se compensa si rompe muchos ladrillos sin tocar la barra
 
         fitnessTotal += fitnessEpisodio;
     }
@@ -376,7 +408,7 @@ function evaluarPoblacion(poblacion) {
     }
 }
 
-function seleccionarPadre(poblacion) {
+function seleccionarPadre(poblacion) { // selección por ruleta
     let total = 0;
     for (const ind of poblacion) total += ind.fitness;
 
@@ -393,6 +425,8 @@ function seleccionarPadre(poblacion) {
     return poblacion[poblacion.length - 1];
 }
 
+
+
 function cruzar(p1, p2) {
     const genesHijo = [];
     const punto = Math.floor(gaRandom() * NUM_GENES);
@@ -402,7 +436,10 @@ function cruzar(p1, p2) {
 
         // Mutación
         if (gaRandom() < MutationRate) {
-            genesHijo[i] += (gaRandom() * 0.4 - 0.2); // ruido pequeño
+            const sigma = 0.4; // desviación estándar para la mutación gaussiana
+            genesHijo[i] += gaussianaRandom() * sigma;
+            if (genesHijo[i] > 1) genesHijo[i] = 1;
+            if (genesHijo[i] < -1) genesHijo[i] = -1;
         }
     }
 
@@ -437,9 +474,12 @@ function crearSiguienteGeneracion(poblacion) {
 
 // Ejecuta todo el algoritmo genético y guarda el mejor individuo
 function ejecutarAlgoritmoGenetico() {
-    // 1) Leemos parámetros de la UI (N, G, % mutación, seed, etc.)
+    // 1) Leemos parametros de la UI (N, G, % mutación, seed, etc.)
     GA_SEED = GA_SEED >>> 0; 
     leerParametrosDesdeUI();
+    gaSEED_inicial = GA_SEED;
+
+
     mejorFitnessHistorial = [];
     promedioFitnessHistorial = [];
     tiemposGeneracionHistorial = [];
@@ -716,7 +756,8 @@ function exportBestJson() {
             mutationPercent: mutationPercentUI,
             fpsSim: GA_FPS,
             episodesPerIndividual: EpisodiosPorIndividuo,
-            seed: GA_SEED
+            seedInicial: gaSEED_inicial,
+            seedFinal: GA_SEED
         },
         fitness_history: {
             best: mejorFitnessHistorial,
