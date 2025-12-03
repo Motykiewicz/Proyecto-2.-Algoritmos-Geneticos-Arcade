@@ -123,7 +123,17 @@ function resetBola() {
     bola.x = canvas.width / 2;
     bola.y = canvas.height - 60;
 
-    const angle = (-Math.PI / 4) + (Math.random() * Math.PI / 8);
+    // si estamos en modoGA usamos el mismo angulo fijo que en el simulador
+    let angle;
+    const enModoGA = (typeof modoGA !== "undefined" && modoGA);
+
+    if (enModoGA) {
+        angle = -Math.PI / 4; // mismo que en crearEntornoSimulado
+    } else {
+        // juego normal: angulo aleatorio dentro de un rango
+        angle = (-Math.PI / 4) + (Math.random() * Math.PI / 8);
+    }
+
     bola.vx = Math.cos(angle) * bola.speed;
     bola.vy = Math.sin(angle) * bola.speed;
 }
@@ -190,8 +200,6 @@ function setupEventListeners() {
     });
 
     btnProbarAlgoritmo.addEventListener("click", () => {
-        juegoAutomatico = true;
-        gameRunning = true;
         btnPause.disabled = false;
     });
 }
@@ -295,28 +303,30 @@ function handleCollisions() {
     }
 
     // Ladrillos
-    for (const brick of bricks) {
-        if (!brick.alive) continue;
+for (const brick of bricks) {
+    if (!brick.alive) continue;
 
-        if (circleIntersectsRect(bola, brick)) {
-            brick.alive = false;
-            score += 10;
-            bricksRotos++;
+    if (circleIntersectsRect(bola, brick)) {
+        brick.alive = false;
+        score += 10;
+        bricksRotos++;
 
-            // cada 10 ladrillos, se acelera, pero ahora se reinicia entre vidas/partidas
-            if (bricksRotos % 10 === 0) {
-                bola.speed *= 1.2;
-                const dir = Math.atan2(bola.vy, bola.vx);
-                bola.vx = Math.cos(dir) * bola.speed;
-                bola.vy = Math.sin(dir) * bola.speed;
-            }
+        const enModoGA = (typeof modoGA !== "undefined" && modoGA);
 
-            document.getElementById("scoreValue").textContent = score;
-
-            bola.vy *= -1;
-            break;
+        // cada 10 ladrillos, se acelera, PERO solo en juego normal
+        if (!enModoGA && bricksRotos % 10 === 0) {
+            bola.speed *= 1.2;
+            const dir = Math.atan2(bola.vy, bola.vx);
+            bola.vx = Math.cos(dir) * bola.speed;
+            bola.vy = Math.sin(dir) * bola.speed;
         }
+
+        document.getElementById("scoreValue").textContent = score;
+
+        bola.vy *= -1;
+        break;
     }
+}
 
     if (bricks.every(b => !b.alive)) {
         initBricks();

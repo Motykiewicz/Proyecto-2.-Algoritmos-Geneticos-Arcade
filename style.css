@@ -26,13 +26,6 @@ button {
     cursor: pointer;
 }
 
-#gameCanvas {
-    background: #000;
-    border: 2px solid #555;
-    display: block;
-    margin: 0 auto 20px auto;
-}
-
 #ga-params label {
     display: flex;
     align-items: center;
@@ -43,7 +36,6 @@ button {
     padding: 2px 4px;
     font-size: 13px;
 }
-
 #advertenciaPorcentaje {
     min-width: 180px;
     font-size: 13px;
@@ -70,3 +62,57 @@ button {
     font-size: 13px;
 }
 
+
+#zonaJuego {
+    max-width: 1100px;
+    margin: 10px auto 30px auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 16px;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+#gameWrapper {
+    flex: 0 0 auto;
+}
+
+#gameCanvas {
+    background: #000;
+    border: 2px solid #555;
+    display: block;
+    margin: 0 auto 0 auto;
+}
+
+/* Tarjetas de comparacion de agentes */
+.panel-agente {
+    flex: 0 0 260px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: #181818;
+    text-align: left;
+    font-size: 13px;
+}
+
+.panel-agente h3 {
+    margin-top: 0;
+    margin-bottom: 6px;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* apilamos de manera vertical */
+@media (max-width: 900px) {
+    #zonaJuego {
+        flex-wrap: wrap;
+    }
+
+    #gameWrapper {
+        order: -1; /* ponemos primero el juego y luego los paneles */
+    }
+
+    #gameCanvas {
+        margin-bottom: 20px;
+    }
+}

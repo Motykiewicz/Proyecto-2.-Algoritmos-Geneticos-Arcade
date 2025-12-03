@@ -1,27 +1,40 @@
 // algoritmoGen.js
-console.log("algoritmoGen.js cargado");
+//
 
-// digamos el orden seria: 
-// 1. seleccion
-// 2. fitness
-// 3. cruzar al azar 
-// 4. mutar (un individuo nuevo) al azar con cierta probabilidad
-// 5. nueva gen
-// 6. repetir 
+// tabla de contenidos
+// 0. configuracion global y los rng ------------------------------------ linea 23
+// 1. lectura de parametros de la interfaz y validacion ----------------- linea 69
+// 2. estado global del algoritmo genetico y relacion con el juego  ----- linea 135
+// 3. representacion del individuo y features del entorno---------------- linea 180
+// 4. simulacion del individuo en entorno simulado----------------------- linea 231
+// 5. funcion de fitness ------------------------------------------------ linea 418
+// 6. operadores del algoritmo genetico --------------------------------- linea 440 
+    // 6.1 seleccion ---------------------------------------------------- linea 445
+    // 6.2 cruzamiento -------------------------------------------------- linea 476
+    // 6.3 mutacion ----------------------------------------------------- linea 476 (estas dos van juntas)
+    // 6.4 crear nueva generacion --------------------------------------- linea 504
+// 7. bucle principal del algoritmo genetico ---------------------------- linea 563
+// 8. metricas, graficas y exportacion de datos ------------------------- linea 803
+// 9. botones e interfaz de usuario ------------------------------------- linea 868
 
-// configuración del algoritmo genetico
+//empezamos 
 
-// cada individuo es un vector de pesos:
-// [w_dx, w_dy, w_vx, w_vy, bias]
+//----------------------------------
+// 0. Configuracion global y los RNG
+//------------------------------------
 
+// numero de genes por individuo
 const NUM_GENES = 5;
-let DT_SIM = 1 / 60;   // se ajusta con GA_FPS en la interfaz
+
+// se ajusta con GA_FPS en la interfaz
+let DT_SIM = 1 / 60;   
 
 // ponemos valores defaults por si no estan definidos dentro de game.js 
 if (typeof populationSize === "undefined") populationSize = 30;
-if (typeof N_Generations === "undefined") N_Generations = 60;
+if (typeof N_Generations === "undefined") N_Generations = 30;
 if (typeof MutationRate === "undefined") MutationRate = 0.05;
-if (typeof Max_steps === "undefined") Max_steps = 400;
+if (typeof Max_steps === "undefined") Max_steps = 600;
+
 
 // los parametros leidos desde la interfaz para el reporte 
 let selectionPercent = 10;
@@ -29,8 +42,6 @@ let crossoverPercent = 85;
 let mutationPercentUI = 5;
 let GA_FPS = 60;
 let EpisodiosPorIndividuo = 1;
-let GA_tamanoTorneo = 3;
-
 
 // Semilla y RNG del GA
 let USE_SEEDED_RNG = true; 
@@ -39,151 +50,136 @@ let gaSEED_inicial = GA_SEED;
 
 // funcion random para sacar la semilla del ga 
 function gaRandom() {
-    if (!USE_SEEDED_RNG) {
-        return Math.random();
-    }
-    // LCG simple cuando queremos modo "con semilla"
+    if (!USE_SEEDED_RNG) {return Math.random();}
     GA_SEED = (1664525 * GA_SEED + 1013904223) >>> 0;
     return GA_SEED / 0xFFFFFFFF;
 }
 
+// funcion para obtener valores aleatorios ocn distribucion gausiana
 function gaussianaRandom() {
-        let u = gaRandom() || 1e-9;
-        let v = gaRandom() || 1e-9;
-        return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
-    }
+    let u = gaRandom() || 1e-9;
+    let v = gaRandom() || 1e-9;
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
 
 
 
+
+
+//-----------------------------------------------------
+// 1. Lectura de parametros de la interfaz y validacion
+//-------------------------------------------------------
 
 // Se leen los parametros desde la interfaz 
 function leerParametrosDesdeUI() {
-    const popInput = document.getElementById("inputPopulation");
-    const genInput = document.getElementById("inputGenerations");
-    const mutInput = document.getElementById("inputMut");
-    const seedInput = document.getElementById("inputSeed");
-    const fpsInput = document.getElementById("inputFPS");
-    const epInput = document.getElementById("inputEpisodes");
-    const selInput = document.getElementById("inputSel");
-    const crossInput = document.getElementById("inputCross");
+    populationSize = parseInt(document.getElementById("inputPopulation").value);
+    if (populationSize < 20) populationSize = 20; //tiene que haber al menos 20 individuos
 
-    
+    N_Generations = parseInt(document.getElementById("inputGenerations").value);
+    if (N_Generations < 50) N_Generations = 50; // al menos 50 generaciones
 
-    if (popInput) {
-        const v = parseInt(popInput.value);
-        if (!isNaN(v) && v >= 30) populationSize = v;
-    }
-    if (genInput) {
-        const v = parseInt(genInput.value);
-        if (!isNaN(v) && v >= 60) N_Generations = v;
-    }
-    if (mutInput) {
-        const v = parseFloat(mutInput.value);
-        if (!isNaN(v)) {
-            mutationPercentUI = v;
-            MutationRate = mutationPercentUI / 100.0;  // 5% seria 0.05
+    MutationRate = parseInt(document.getElementById("inputMut").value) / 100;
+    mutationPercentUI = parseInt(document.getElementById("inputMut").value);
+
+    selectionPercent = parseInt(document.getElementById("inputSel").value);
+    crossoverPercent = parseInt(document.getElementById("inputCross").value);
+
+    GA_SEED = parseInt(document.getElementById("inputSeed").value);
+    gaSEED_inicial = GA_SEED;
+
+    GA_FPS = parseInt(document.getElementById("inputFPS").value);
+    EpisodiosPorIndividuo = parseInt(document.getElementById("inputEpisodes").value);
+}
+
+
+function validarPorcentajes() {
+    let sel = parseInt(document.getElementById("inputSel").value);
+    let cros = parseInt(document.getElementById("inputCross").value);
+    let mut = parseInt(document.getElementById("inputMut").value);
+
+    let suma = sel + cros + mut;
+    const advert = document.getElementById("advertenciaPorcentaje");
+
+    if (suma !== 100) {
+        advert.textContent = "Los porcentajes deben sumar 100%";
+        if (btnGA) btnGA.disabled = true;
+        if (btnGreedy) btnGreedy.disabled = true;
+        if (btnDescargarDemo) btnDescargarDemo.disabled = true;
+        if (btnDesc) btnDesc.disabled = true;
+    } 
+    else {
+        advert.textContent = "";
+        if (btnGA) btnGA.disabled = false;
+        if (btnGreedy) btnGreedy.disabled = false;
+
+        if (gaEntrenado) {
+            if (btnDemo) btnDemo.disabled = false;
+            if (btnDesc) btnDesc.disabled = false;
         }
     }
-    if (seedInput) {
-        const v = parseInt(seedInput.value);
-        if (!isNaN(v)) GA_SEED = v >>> 0;
-    }
-    if (fpsInput) {
-        const v = parseInt(fpsInput.value);
-        if (!isNaN(v) && v > 0){
-            GA_FPS = v;
-            DT_SIM = 1 /GA_FPS;
-        } 
-    }
-    if (epInput) {
-        const v = parseInt(epInput.value);
-        if (!isNaN(v) && v >= 1) EpisodiosPorIndividuo = v;
-    }
-    if (selInput) {
-        const v = parseFloat(selInput.value);
-        if (!isNaN(v)) selectionPercent = v;
-    }
-    if (crossInput) {
-        const v = parseFloat(crossInput.value);
-        if (!isNaN(v)) crossoverPercent = v;
-    }
-
-    console.log(
-        "[GA] Parametros:",
-        "N =", populationSize,
-        "G =", N_Generations,
-        "MutationRate =", MutationRate,
-        "Seed =", GA_SEED,
-        "FPS sim =", GA_FPS,
-        "Episodios/ind =", EpisodiosPorIndividuo,
-        "%Sel =", selectionPercent,
-        "%Cruce =", crossoverPercent
-    );
 }
 
-
-
-
-// validar que el porcentaje de selección + cruce + mutacion sumen 100
-function validarPorcentajes() {
-    const selInput = document.getElementById("inputSel");
-    const crossInput = document.getElementById("inputCross");
-    const mutInput = document.getElementById("inputMut");
-    const warning = document.getElementById("advertenciaPorcentaje");
-    const btnGA = document.getElementById("btnProbarAlgoritmo");
-    const btnMejorDemo = document.getElementById("btnMejorDemo");
-    const btnDescargarDemo = document.getElementById("btnDescargarDemo");
-
-    if (!selInput || !crossInput || !mutInput || !btnGA) return;
-
-    const sel = parseFloat(selInput.value)   || 0;
-    const cross = parseFloat(crossInput.value) || 0;
-    const mut = parseFloat(mutInput.value)   || 0;
-    const total = sel + cross + mut;
-
-    if (Math.abs(total - 100) > 0.01) {
-        warning.textContent = "Los porcentajes deben sumar 100%";
-        btnGA.disabled = true;
-        if (btnMejorDemo) btnMejorDemo.disabled = true;
-        if (btnDescargarDemo) btnDescargarDemo.disabled = true;
-    } else {
-        warning.textContent = "";
-        btnGA.disabled = false;
-    }
-}
-
-// Como este script está al final del body, el DOM ya existe.
-(function initPorcentajes() {
-    ["inputSel", "inputCross", "inputMut"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener("input", validarPorcentajes);
-    });
+function initPorcentajes() {
+    document.getElementById("inputSel").addEventListener("change", validarPorcentajes);
+    document.getElementById("inputCross").addEventListener("change", validarPorcentajes);
+    document.getElementById("inputMut").addEventListener("change", validarPorcentajes);
     validarPorcentajes();
-})();
+}
 
 
 
 
 
 
-// Estado global del algoritmo genetico 
+//-----------------------------------------------------------------
+// 2. Estado global del algoritmo genetico y relacion con el juego 
+//----------------------------------------------------------------
 
+
+// el mejor individuo final del algoritmo genetico
 let gaMejorGenoma = null;
 let gaEntrenado = false;
 let modoGA = false;
+
+// historiales para graficas
 let mejorFitnessHistorial = [];
 let promedioFitnessHistorial = [];
 let tiemposGeneracionHistorial = [];
+
 let tiempoInicioGA = 0;
 let tiempoFinalGA = 0;
+
+// guardamos la funcion update original del juego para luego llamarla
 const updateOriginal = window.update; // Guardamos la función update ORIGINAL definida en game.js
 
+// para que el algoritmo genetico controle la barra cuando modoGA este activo
+window.update = function (dt) {
+    if (modoGA && gaMejorGenoma) {
+        const features = obtenerFeaturesDesdeJuego();
+        const accion = decidirAccion(gaMejorGenoma.genes, features);
+
+        // aplicar direccion
+        barra.dir = accion;
+
+        const anterior = juegoAutomatico;
+        juegoAutomatico = false;
+        updateOriginal(dt);
+        juegoAutomatico = anterior;
+
+    } else {
+        updateOriginal(dt);
+    }
+};
 
 
-// EMPEZAMOS CON EL ALGORITMO GENETICO!
 
-// representacion del individuo
-// Crea un individuo con genes aleatorios en [-1, 1]
+
+
+//--------------------------------------------------------
+// 3. Representacion del individuo y features del entorno
+//--------------------------------------------------------
+
+// crea un individuo aleatorio con 5 genes entre -1 y 1
 function crearGenomaAleatorio() {
     const genes = [];
     for (let i = 0; i < NUM_GENES; i++) {
@@ -192,33 +188,28 @@ function crearGenomaAleatorio() {
     return { genes, fitness: 0 };
 }
 
-// features desde entorno simulado para la evaluacion para el vector de pesos 
+// obtener caraceteristicas desde el entorno simulado
 function obtenerFeaturesDesdeEntorno(ent) {
     const barraCentro = ent.barra.x + ent.barra.width / 2;
-
-    const dx = (ent.bola.x - barraCentro) / canvas.width;   // distancia horizontal normalizada
-    const dy = (ent.bola.y - ent.barra.y) / canvas.height;  // distancia vertical normalizada
-
-    const vx = ent.bola.vx / ent.bola.speed; // -1..1
-    const vy = ent.bola.vy / ent.bola.speed; // -1..1
-
-    return [dx, dy, vx, vy, 1]; // 1 = bias
-}
-
-// features desde el juego real , controlar la barra de forma automatica 
-function obtenerFeaturesDesdeJuego() {
-    const barraCentro = barra.x + barra.width / 2;
-
-    const dx = (bola.x - barraCentro) / canvas.width;
-    const dy = (bola.y - barra.y) / canvas.height;
-
-    const vx = bola.vx / bola.speed;
-    const vy = bola.vy / bola.speed;
-
+    const dx = (ent.bola.x - barraCentro) / ent.canvasWidth;
+    const dy = (ent.bola.y - ent.barra.y) / ent.canvasHeight;
+    const vx = ent.bola.vx / ent.bola.speed;
+    const vy = ent.bola.vy / ent.bola.speed;
     return [dx, dy, vx, vy, 1];
 }
 
-// poltca lineal: signo(w · x)
+
+// obtener caracteristicas desde el juego real
+function obtenerFeaturesDesdeJuego() {
+    const barraCentro = barra.x + barra.width / 2;
+    const dx = (bola.x - barraCentro) / canvas.width;
+    const dy = (bola.y - barra.y) / canvas.height;
+    const vx = bola.vx / bola.speed;
+    const vy = bola.vy / bola.speed;
+    return [dx, dy, vx, vy, 1];
+}
+
+// poltca lineal: signo(w · x) con umbral
 function decidirAccion(genoma, features) {
     let suma = 0;
     for (let i = 0; i < genoma.length; i++) {
@@ -232,8 +223,16 @@ function decidirAccion(genoma, features) {
 }
 
 
-// Entorno de simulacion interno
-// Crea una copia local de barra, bola y ladrillos para probar un individuo
+
+
+
+//------------------------------------------------
+// 4. Simulacion del individuo en entorno simulado
+//-------------------------------------------------
+// se ejecuta para evaluar el fitness de un individuo sobre el entorno simulado y ver que tan bien juega
+
+
+// crear un entorno simulado similar al del juego real para la simulacion del individuo
 function crearEntornoSimulado() {
     // Barra simulada
     const barraSim = {
@@ -280,15 +279,15 @@ function crearEntornoSimulado() {
     return {
         barra: barraSim,
         bola: bolaSim,
-        bricks: bricksSim
+        bricks: bricksSim,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height
     };
 }
 
-// FUNCION DE FITNESS!
-// Ejecuta uno o varios episodios simulados para un genoma y devuelve el fitness
+// simular un individuo sobre el entorno, devolviendo su fitness promedio
 function simularIndividuo(genoma) {
     let fitnessTotal = 0;
-
     const episodios = Math.max(1, EpisodiosPorIndividuo);
 
     for (let ep = 0; ep < episodios; ep++) {
@@ -299,32 +298,37 @@ function simularIndividuo(genoma) {
         let rebotesEnBarra = 0;
         let sumaDistanciaX = 0;
         let vivo = true;
+
         let bricksSeguidosSinTocarBarra = 0;
         let maxBricksSeguidosSinTocarBarra = 0;
 
         while (pasos < Max_steps && vivo) {
-            // primero decidimos la accion que va a tomar segun el estado y genoma 
+            // calcular accion segun la politica lineal del individuo
             const features = obtenerFeaturesDesdeEntorno(ent);
-            const accion = decidirAccion(genoma, features);
+            const accion = decidirAccion(genoma, features); // -1, 0, 1
 
-            // luego movemos el entorno simulado segun la accion tomada
+            // mover barra
             ent.barra.x += accion * ent.barra.speed * DT_SIM;
             if (ent.barra.x < 0) ent.barra.x = 0;
-            if (ent.barra.x + ent.barra.width > canvas.width) {
-                ent.barra.x = canvas.width - ent.barra.width;
+            if (ent.barra.x + ent.barra.width > ent.canvasWidth) {
+                ent.barra.x = ent.canvasWidth - ent.barra.width;
             }
 
-            // movemos la bola
+            // distancia en X barra-bola
+            const barraCentro = ent.barra.x + ent.barra.width / 2;
+            const distX = Math.abs(ent.bola.x - barraCentro);
+            sumaDistanciaX += distX;
+
+            // mover bola
             ent.bola.x += ent.bola.vx * DT_SIM;
             ent.bola.y += ent.bola.vy * DT_SIM;
 
-            // luego sigue la parte de colisiones igual que en el juego real
             // paredes laterales
             if (ent.bola.x - ent.bola.radius < 0) {
                 ent.bola.x = ent.bola.radius;
                 ent.bola.vx *= -1;
-            } else if (ent.bola.x + ent.bola.radius > canvas.width) {
-                ent.bola.x = canvas.width - ent.bola.radius;
+            } else if (ent.bola.x + ent.bola.radius > ent.canvasWidth) {
+                ent.bola.x = ent.canvasWidth - ent.bola.radius;
                 ent.bola.vx *= -1;
             }
 
@@ -334,149 +338,217 @@ function simularIndividuo(genoma) {
                 ent.bola.vy *= -1;
             }
 
-            // fondo (cuando pierde una vida)
-            if (ent.bola.y - ent.bola.radius > canvas.height) {
+            // fondo: cuando cae debajo del canvas el episodio termina
+            if (ent.bola.y - ent.bola.radius > ent.canvasHeight) {
                 vivo = false;
             }
 
-            // la barra
+            // colision con barra
             if (circleIntersectsRect(ent.bola, ent.barra)) {
                 ent.bola.y = ent.barra.y - ent.bola.radius;
                 ent.bola.vy *= -1;
 
-                const hitPos = (ent.bola.x - (ent.barra.x + ent.barra.width / 2)) / (ent.barra.width / 2);
+                const hitPos =
+                    (ent.bola.x - (ent.barra.x + ent.barra.width / 2)) /
+                    (ent.barra.width / 2);
                 ent.bola.vx = hitPos * ent.bola.speed;
 
                 rebotesEnBarra++;
-                bricksSeguidosSinTocarBarra = 0;
+                bricksSeguidosSinTocarBarra = 0; // se resetea el combo
             }
 
-            // ladrillos
-            for (const brick of ent.bricks) {
+            // colision con ladrillos
+            for (let i = 0; i < ent.bricks.length; i++) {
+                const brick = ent.bricks[i];
                 if (!brick.alive) continue;
+
                 if (circleIntersectsRect(ent.bola, brick)) {
                     brick.alive = false;
                     bricksRotosSim++;
+
+                    // invertimos direccion vertical
                     ent.bola.vy *= -1;
 
+                    // combo de ladrillos sin tocar la barra
                     bricksSeguidosSinTocarBarra++;
                     if (bricksSeguidosSinTocarBarra > maxBricksSeguidosSinTocarBarra) {
                         maxBricksSeguidosSinTocarBarra = bricksSeguidosSinTocarBarra;
                     }
+
                     break;
                 }
             }
 
-            // Si no queda ningun ladrillo, terminamos episodio
-            if (ent.bricks.every(b => !b.alive)) {
+            // si ya no quedan ladrillos vivos, se termina el episodio
+            const quedanLadrillosVivos = ent.bricks.some(b => b.alive);
+            if (!quedanLadrillosVivos) {
                 vivo = false;
             }
-
-            // distancia horizontal media entre bola y barra
-            const barraCentro = ent.barra.x + ent.barra.width / 2;
-            sumaDistanciaX += Math.abs(ent.bola.x - barraCentro);
 
             pasos++;
         }
 
-        const pasosAlcanzados = pasos;
-        const distPromedio = pasosAlcanzados > 0 ? (sumaDistanciaX / pasosAlcanzados) : canvas.width / 2;
+        const pasosAlcanzados = Math.max(1, pasos);
+        const distPromedio = sumaDistanciaX / pasosAlcanzados;
+        const ratioSupervivencia = pasosAlcanzados / Max_steps;
+        const distNorm = distPromedio / ent.canvasWidth;
 
-        const ratioSupervivencia = pasosAlcanzados / Max_steps;   // ambos son valores entre 0 y 1
-        const distNorm = distPromedio / canvas.width;             // 
-
-        // calculo del fitness segun los objetivos
-        const fitnessEpisodio =
-            bricksRotosSim * 2000 +        // romper ladrillos vale muchisimo
-            rebotesEnBarra * 400 +         // rebotar la bola en la barra también pero no tanto
-            ratioSupervivencia * 3000 -    // sobrevivir más tiempo suma bastante
-            distNorm * 600 +                // estar lejos de la bola resta puntos
-            maxBricksSeguidosSinTocarBarra * 500; // se compensa si rompe muchos ladrillos sin tocar la barra
+        const fitnessEpisodio = calcularFitnessDesdeEstadistcias(
+            bricksRotosSim,
+            rebotesEnBarra,
+            ratioSupervivencia,
+            distNorm,
+            maxBricksSeguidosSinTocarBarra
+        );
 
         fitnessTotal += fitnessEpisodio;
     }
 
-    // promedio sobre episodios
     return fitnessTotal / episodios;
 }
 
 
-// operadores del algoritmo genetico
+
+
+
+//------------------------
+// 5. Funcion de fitness
+//------------------------
+
+// el fitness se calcula a partir de varias estadisticas recogidas durante la simulacion del individuo
+// como numero de ladrillos rotos, mantener la bola viva(rebotes), tiempo de supervivencia, distancia barra-bola y maximo combo de ladrillos rotos sin tocar la barra
+// la funcion se puede utilizar tanto para el entrenamiento del GA como para evaluar el rendimiento de la politica greedy
+// asi podemos comparar ambos enfoques con la misma metrica
+
+function calcularFitnessDesdeEstadistcias(bricksRotosSim, rebotesEnBarra, ratioSupervivencia, distNorm, maxBricksSeguidosSinTocarBarra) {
+    return bricksRotosSim * 2000 +        // romper ladrillos vale muchisimo
+           rebotesEnBarra * 400 +         // rebotar la bola en la barra también pero no tanto
+           ratioSupervivencia * 3000 -    // sobrevivir más tiempo suma bastante
+           distNorm * 600 +               // estar lejos de la bola resta puntos
+           maxBricksSeguidosSinTocarBarra * 500; // se compensa si rompe muchos ladrillos sin tocar la barra
+}
+
+
+
+
+//---------------------------------------
+// 6. Operadores del algoritmo genetico
+//--------------------------------------
+
+
+//-----------------
+// 6.1 Selección
+//-----------------
+
+// primero evaluamos toda la poblacion para asignar fitness a cada individuo
 function evaluarPoblacion(poblacion) {
-    for (const ind of poblacion) {
-        ind.fitness = simularIndividuo(ind.genes);
+    for (let i = 0; i < poblacion.length; i++) {
+        poblacion[i].fitness = simularIndividuo(poblacion[i].genes);
     }
 }
 
-function seleccionarPadre(poblacion) { // selección por ruleta
-    let total = 0;
-    for (const ind of poblacion) total += ind.fitness;
-
-    if (total === 0) {
-        // Si todos valen 0, escogemos uno al azar
-        return poblacion[Math.floor(gaRandom() * poblacion.length)];
+// luego hacemos una seleccion por ruleta para elegir padres
+function seleccionarPadre(poblacion) {
+    let sumaFitness = 0;
+    for (let i = 0; i < poblacion.length; i++) {
+        sumaFitness += Math.max(0, poblacion[i].fitness);
     }
 
-    let r = gaRandom() * total;
-    for (const ind of poblacion) {
-        r -= ind.fitness;
-        if (r <= 0) return ind;
+    if (sumaFitness <= 0) {
+        const idxAzar = Math.floor(gaRandom() * poblacion.length);
+        return poblacion[idxAzar];
+    }
+
+    let r = gaRandom() * sumaFitness;
+    for (let i = 0; i < poblacion.length; i++) {
+        r -= Math.max(0, poblacion[i].fitness);
+        if (r <= 0) return poblacion[i];
     }
     return poblacion[poblacion.length - 1];
 }
 
-
-
+//----------------------------------
+// 6.2 y 6.3 Cruzamiento y mutación
+//---------------------------------
+// cruzar dos padres para crear un hijo con mutacion
 function cruzar(p1, p2) {
     const genesHijo = [];
+
+    // cruce de un punto
     const punto = Math.floor(gaRandom() * NUM_GENES);
 
     for (let i = 0; i < NUM_GENES; i++) {
-        genesHijo[i] = (i < punto) ? p1.genes[i] : p2.genes[i];
+        const genBase = (i < punto) ? p1.genes[i] : p2.genes[i];
+        let genNuevo = genBase;
 
-        // Mutación
+        // mutacion gaussiana con probabilidad MutationRate
         if (gaRandom() < MutationRate) {
-            const sigma = 0.4; // desviación estándar para la mutación gaussiana
-            genesHijo[i] += gaussianaRandom() * sigma;
-            if (genesHijo[i] > 1) genesHijo[i] = 1;
-            if (genesHijo[i] < -1) genesHijo[i] = -1;
+            genNuevo += gaussianaRandom() * 0.2; // ruido pequeno
+            if (genNuevo > 1) genNuevo = 1;
+            if (genNuevo < -1) genNuevo = -1;
         }
+
+        genesHijo.push(genNuevo);
     }
 
     return { genes: genesHijo, fitness: 0 };
 }
 
+
+//-------------------------------
+// 6.4 Crear nueva generación
+//-------------------------------
+
 function crearSiguienteGeneracion(poblacion) {
-    const ordenada = [...poblacion].sort((a, b) => b.fitness - a.fitness);
-    const nueva = [];
+    // ordenar de mejor a peor
+    poblacion.sort((a, b) => b.fitness - a.fitness);
 
-    // elitismo: el mejor 10% de la población
-    let elitismo = Math.floor(populationSize * (selectionPercent / 100));  // math.floor es lo mismo que math.max pero redondea hacia abajo para que no haya decimales sueltos 
-    if (elitismo < 1) elitismo = 1;
-    if (elitismo > populationSize) elitismo = populationSize;
+    // porcentaje de elite tomado del parametro de interfaz
+    const porcentajeElite = Math.max(1, selectionPercent);
+    let numElite = Math.floor(populationSize * (porcentajeElite / 100));
+    if (numElite < 1) numElite = 1;
+    if (numElite > populationSize) numElite = populationSize;
 
+    const nuevaPoblacion = [];
 
-    // Copiar élites
-    for (let i = 0; i < elitismo && i < ordenada.length; i++) {
-        const copiaGenes = ordenada[i].genes.slice();
-        nueva.push({ genes: copiaGenes, fitness: 0 });
+    // copiar la elite
+    for (let i = 0; i < numElite; i++) {
+        const original = poblacion[i];
+        nuevaPoblacion.push({
+            genes: original.genes.slice(),
+            fitness: 0
+        });
     }
 
-    // Rellenar resto con cruza + mutación
-    while (nueva.length < populationSize) {
-        const p1 = seleccionarPadre(ordenada);
-        const p2 = seleccionarPadre(ordenada);
-        nueva.push(cruzar(p1, p2));
+
+    // rellenar el resto con hijos de cruce + mutacion
+    while (nuevaPoblacion.length < populationSize) {
+        const padre1 = seleccionarPadre(poblacion);
+        const padre2 = seleccionarPadre(poblacion);
+        const hijo = cruzar(padre1, padre2);
+        nuevaPoblacion.push(hijo);
     }
 
-    return nueva;
+    return nuevaPoblacion;
 }
+
+
+
+//--------------------------------------------
+// 7. Bucle principal del algoritmo genetico
+//------------------------------------------
+
+// el orden seria: se leen los parametros desde la UI, se crea la poblacion inicial, 
+// luego para cada generacion se evalua la poblacion, se ordena por fitness, se crea la siguiente generacion y se repite
+// al final se guarda el mejor individuo encontrado
 
 // Ejecuta todo el algoritmo genético y guarda el mejor individuo
 function ejecutarAlgoritmoGenetico() {
-    // 1) Leemos parametros de la UI (N, G, % mutación, seed, etc.)
-    GA_SEED = GA_SEED >>> 0; 
+    // Leemos parametros de la UI (N, G, % mutación, seed, etc.)
     leerParametrosDesdeUI();
+
+    // Inicializamos la semilla del RNG (entero sin signo)
+    GA_SEED = GA_SEED >>> 0; 
     gaSEED_inicial = GA_SEED;
 
 
@@ -486,287 +558,283 @@ function ejecutarAlgoritmoGenetico() {
     tiempoInicioGA = performance.now();
     tiempoFinalGA = tiempoInicioGA;
 
+    // para llevar control de parametros en los logs
     console.log("Iniciando entrenamiento GA...");
-    console.log("USE_SEEDED_RNG =", USE_SEEDED_RNG, "GA_SEED =", GA_SEED);
+    console.log(
+        "[GA] Parametros: N =",
+        populationSize,
 
+        "G =",
+        N_Generations,
+
+        "MutationRate =",
+        MutationRate,
+
+        "Seed =",
+        GA_SEED,
+
+        "FPS sim =",
+        GA_FPS,
+
+        "Episodios/ind =",
+        EpisodiosPorIndividuo,
+
+        "%Sel =",
+        selectionPercent,
+
+        "%Cruce =",
+        crossoverPercent
+    ); 
+
+    // crear poblacion inicial
     let poblacion = [];
     for (let i = 0; i < populationSize; i++) {
         poblacion.push(crearGenomaAleatorio());
     }
 
+    // bucle principal del algoritmo genetico
     for (let g = 0; g < N_Generations; g++) {
+        const tIniGen = performance.now();
 
+        // evaluar poblacion
         evaluarPoblacion(poblacion);
+
+        // ordenar por fitness y guardar estadisticas
         poblacion.sort((a, b) => b.fitness - a.fitness);
-        const mejor = poblacion[0];
 
-        // promedio de fitness de la generacion 
-        let sumaFitness = 0;
-        for (const ind of poblacion) sumaFitness += ind.fitness;
-        const prom = sumaFitness / poblacion.length;
 
-        mejorFitnessHistorial.push(mejor.fitness);
-        promedioFitnessHistorial.push(prom);
-        const t1 = performance.now();
-        tiemposGeneracionHistorial.push(t1 - tiempoFinalGA);
+        const mejor = poblacion[0].fitness;
+        let suma = 0;
+        for (let i = 0; i < poblacion.length; i++) {
+            suma += poblacion[i].fitness;
+        }
+        const promedio = suma / poblacion.length;
 
-        console.log(`Gen ${g} – mejor fitness: ${mejor.fitness.toFixed(2)} - promedio: ${prom.toFixed(2)}`);
+        mejorFitnessHistorial.push(mejor);
+        promedioFitnessHistorial.push(promedio);
 
+        const tFinGen = performance.now();
+        tiemposGeneracionHistorial.push(tFinGen - tIniGen);
+
+        console.log("Gen " + g + " – mejor fitness: " + mejor.toFixed(2) + " - promedio: " + promedio.toFixed(2));
+
+        // crear nueva generacion (elitismo + cruza + mutacion)
         poblacion = crearSiguienteGeneracion(poblacion);
     }
 
+    // Evaluamos una vez mas al final para asegurar fitness actualizado
+    evaluarPoblacion(poblacion);
+    poblacion.sort((a, b) => b.fitness - a.fitness);
 
-    function actualizarMetricasEnInterfaz() {
-        const etiquetaMejorFitness = document.getElementById("etiquetaMejorFitness");
-        const etiquetaFitnessPromedio = document.getElementById("etiquetaFitnessPromedio");
-        const etiquetaTiempoTotal = document.getElementById("etiquetaTiempoTotal");
-        const etiquetaTiempoGen = document.getElementById("etiquetaTiempoGen");
+    gaMejorGenoma = {
+        genes: poblacion[0].genes.slice(),
+        fitness: poblacion[0].fitness
+    };
+    gaEntrenado = true;
 
-        if (!mejorFitnessHistorial.length) return;
-        
-        const mejor = mejorFitnessHistorial[mejorFitnessHistorial.length - 1];
-        const prom = promedioFitnessHistorial[promedioFitnessHistorial.length - 1];
-
-        const tiempoTotal = tiempoFinalGA - tiempoInicioGA;
-        const tiempoGen = tiemposGeneracionHistorial.length ? tiemposGeneracionHistorial.reduce((a, b) => a + b, 0) / tiemposGeneracionHistorial.length : 0;
-
-
-        if (etiquetaMejorFitness) etiquetaMejorFitness.textContent = mejor.toFixed(1);
-        if (etiquetaFitnessPromedio) etiquetaFitnessPromedio.textContent = prom.toFixed(1);
-        if (etiquetaTiempoTotal) etiquetaTiempoTotal.textContent = (tiempoTotal / 1000).toFixed(2) + " s";
-        if (etiquetaTiempoGen) etiquetaTiempoGen.textContent = (tiempoGen / 1000).toFixed(2) + " s";
-    }
-
-    function dibujarGraficoGA() {
-        const canvas = document.getElementById("TablaGA");
-        if (!canvas || !mejorFitnessHistorial.length) return;
-
-        const ctx = canvas.getContext("2d");
-        const ancho = canvas.width;
-        const alto = canvas.height;
-
-        ctx.clearRect(0, 0, ancho, alto);
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, ancho, alto);
-
-        const margenIzq = 40;
-        const margenDer = 10;
-        const margenSup = 25;
-        const margenInf = 20;
-
-        const totalGeneraciones = mejorFitnessHistorial.length;
-        const maxFitness = Math.max(...mejorFitnessHistorial, ...promedioFitnessHistorial);
-        const minFitness = Math.min(...mejorFitnessHistorial, ...promedioFitnessHistorial);
-        const rangoFitness = (maxFitness - minFitness) || 1;
-
-        function xParaGeneracion(i) {
-            if (totalGeneraciones === 1) return margenIzq;
-            const anchoUtil = ancho - margenIzq - margenDer;
-            return margenIzq + (i / (totalGeneraciones - 1)) * anchoUtil;
-        }
-
-        function yParaFitness(valor) {
-            const altoUtil = alto - margenSup - margenInf;
-            const normalizado = (valor - minFitness) / rangoFitness; 
-            // 0 = minFitness (abajo), 1 = maxFitness (arriba)
-            return (alto - margenInf) - normalizado * altoUtil;
-        }
-        
-        ctx.strokeStyle = "#222";
-        ctx.lineWidth = 1;
-        ctx.font = "10px system-ui";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#888";
-
-        const divisiones = 4;
-        for (let i = 0; i <= divisiones; i++) {
-            const t = i / divisiones; // 0..1
-            const y = margenSup + t * (alto - margenSup - margenInf);
-
-            ctx.beginPath();
-            ctx.moveTo(margenIzq, y);
-            ctx.lineTo(ancho - margenDer, y);
-            ctx.stroke();
-
-            const valor = maxFitness - t * rangoFitness;
-            ctx.fillText(valor.toFixed(0), margenIzq - 5, y);
-        }
-
-        // Ejes
-        ctx.strokeStyle = "#555";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(margenIzq, margenSup);
-        ctx.lineTo(margenIzq, alto - margenInf);
-        ctx.lineTo(ancho - margenDer, alto - margenInf);
-        ctx.stroke();
-
-        // lineas de fitness
-        ctx.lineWidth = 2;
-
-
-        // dibujar el mejor fitneess de verde
-        ctx.strokeStyle = "#00ff88";
-        ctx.beginPath();
-        for (let i = 0; i < mejorFitnessHistorial.length; i++) {
-            const x = xParaGeneracion(i);
-            const y = yParaFitness(mejorFitnessHistorial[i]);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-
-
-
-        // diujar el fitness promedio de naranja
-        ctx.strokeStyle = "#ffaa00";
-        ctx.beginPath();
-        for (let i = 0; i < promedioFitnessHistorial.length; i++) {
-            const x = xParaGeneracion(i);
-            const y = yParaFitness(promedioFitnessHistorial[i]);
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        
-        // leyenda
-        ctx.font = "11px system-ui";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-
-        ctx.fillStyle = "#00ff88";
-        ctx.fillText("■ Mejor fitness", margenIzq + 5, 5);
-
-        ctx.fillStyle = "#ffaa00";
-        ctx.fillText("■ Fitness promedio", margenIzq + 130, 5);
-    }
-    
     tiempoFinalGA = performance.now();
+
+    //Actualizamos metricas y grafico
     actualizarMetricasEnInterfaz();
     dibujarGraficoGA();
 
+    // habilitamos botones de demo y descarga
+    const btnMejorDemo = document.getElementById("btnMejorDemo");
+    const btnDescargarDemo = document.getElementById("btnDescargarDemo");
+    if (btnMejorDemo) btnMejorDemo.disabled = false;
+    if (btnDescargarDemo) btnDescargarDemo.disabled = false;
 
-
-
-
-
-
-
-
-    // Evaluación final
-    evaluarPoblacion(poblacion);
-    poblacion.sort((a, b) => b.fitness - a.fitness);
-    gaMejorGenoma = poblacion[0].genes.slice();
-    gaEntrenado = true;
-
-    console.log("Entrenamiento GA finalizado. Mejor genoma:", gaMejorGenoma);
+    console.log("Entrenamiento GA finalizado. Mejor fitness:",gaMejorGenoma.fitness.toFixed(2));
 }
 
 
-// Enganche con el motor del juego
 
-// Si modoGA=true, la barra se mueve con el mejor genoma
-window.update = function (dt) {
-    if (modoGA && gaMejorGenoma) {
-        const features = obtenerFeaturesDesdeJuego();
-        const accion = decidirAccion(gaMejorGenoma, features);
-
-        // Forzamos la dirección de la barra según el GA
-        barra.dir = accion;
-
-        // Desactivamos temporalmente la lógica de juegoAutomatico de game.js
-        const prevAuto = juegoAutomatico;
-        juegoAutomatico = false;
-        updateOriginal(dt);
-        juegoAutomatico = prevAuto;
-    } else {
-        // Comportamiento normal
-        updateOriginal(dt);
-    }
-};
+//--------------------------------------------
+// 8. Metricas, graficas y exportacion de datos
+//---------------------------------------------
 
 
-// Boton "Probar Algoritmo"
-const btnGA = document.getElementById("btnProbarAlgoritmo");
-const btnMejorDemo = document.getElementById("btnMejorDemo");
-const btnDescargarDemo = document.getElementById("btnDescargarDemo");
+function actualizarMetricasEnInterfaz() {
+    if (mejorFitnessHistorial.length === 0) return;
 
-if (btnGA) {
-    console.log("Enganchando botón Probar Algoritmo al GA");
-    btnGA.addEventListener("click", () => {
-        console.log("Click en Probar Algoritmo (entrenando GA)...");
-            ejecutarAlgoritmoGenetico();
-        
+    const ultimoMejor = mejorFitnessHistorial[mejorFitnessHistorial.length - 1];
+    const ultimoProm = promedioFitnessHistorial[promedioFitnessHistorial.length - 1];
 
-        // ya despues de entrenarlo, obtenemos el mejor individuo 
-        if (btnMejorDemo) btnMejorDemo.disabled = false;
-        if (btnDescargarDemo) btnDescargarDemo.disabled = false; 
-    });
-
-
-} else {
-    console.warn("No se encontró #btnProbarAlgoritmo en el DOM");
-}
-
-if (btnMejorDemo) {
-    btnMejorDemo.addEventListener("click", () => {
-        if (!gaEntrenado || !gaMejorGenoma) {
-            alert("Primero entrene el GA con 'Probar Algoritmo'.");
-            return;
+    const tiempoTotalSeg = (tiempoFinalGA - tiempoInicioGA) / 1000;
+    let tiempoPromGen = 0;
+    if (tiemposGeneracionHistorial.length > 0) {
+        let suma = 0;
+        for (let i = 0; i < tiemposGeneracionHistorial.length; i++) {
+            suma += tiemposGeneracionHistorial[i];
         }
-        // Reiniciamos el juego y dejamos que el GA controle la barra
-        if (typeof resetGame === "function") {
-            resetGame();
-        }
-        modoGA = true;
-        gameRunning = true;
-
-        const btnPause = document.getElementById("btnPause");
-        if (btnPause) btnPause.disabled = false;
-
-        console.log("mejor demo: jugando con el mejor individuo guardado.");
-    });
-}
-
-function exportBestJson() {
-    if (!gaEntrenado || !gaMejorGenoma) {
-        alert("No hay individuo entrenado todavía.");
-        return;
+        tiempoPromGen = suma / tiemposGeneracionHistorial.length;
     }
 
-    // un resumen por generacion 
-    const resumenGeneraciones = mejorFitnessHistorial.map((mejor, i) => {
-        const promedio = promedioFitnessHistorial[i] ?? 0;
-        return `Gen ${i} – mejor fitness: ${mejor.toFixed(2)} - promedio: ${promedio.toFixed(2)}`;
-    });
-
-
-    const data = {
-        game: "Arkanoid-GA",
-        representation: "vector_pesos_lineal",
-        num_genes: gaMejorGenoma.length,
-        genes: gaMejorGenoma,
-        ga_params: {
-            populationSize,
-            generations: N_Generations,
-            mutationRate: MutationRate,
-            selectionPercent,
-            crossoverPercent,
-            mutationPercent: mutationPercentUI,
-            fpsSim: GA_FPS,
-            episodesPerIndividual: EpisodiosPorIndividuo,
-            seedInicial: gaSEED_inicial,
-            seedFinal: GA_SEED
-        },
-        fitness_history: {
-            best: mejorFitnessHistorial,
-            avg: promedioFitnessHistorial,
-            resumen_generaciones: resumenGeneraciones
+    const setText = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el && !isNaN(valor)) {
+            el.textContent = valor.toFixed(2);
         }
     };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    setText("etiquetaMejorFitness", ultimoMejor);
+    setText("etiquetaFitnessPromedio", ultimoProm);
+
+    const elTiempoTotal = document.getElementById("etiquetaTiempoTotal");
+    if (elTiempoTotal) elTiempoTotal.textContent = tiempoTotalSeg.toFixed(2);
+
+    const elTiempoGen = document.getElementById("etiquetaTiempoGen");
+    if (elTiempoGen) elTiempoGen.textContent = tiempoPromGen.toFixed(2);
+}
+
+
+function dibujarGraficoGA() {
+    const canvas = document.getElementById("TablaGA");
+    if (!canvas || !mejorFitnessHistorial.length) return;
+
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+
+    if (mejorFitnessHistorial.length === 0) return;
+
+    // encontrar rango de fitness
+    let minF = Infinity;
+    let maxF = -Infinity;
+    for (let i = 0; i < mejorFitnessHistorial.length; i++) {
+        const a = mejorFitnessHistorial[i];
+        const b = promedioFitnessHistorial[i];
+        if (a < minF) minF = a;
+        if (b < minF) minF = b;
+        if (a > maxF) maxF = a;
+        if (b > maxF) maxF = b;
+    }
+    if (minF === Infinity || maxF === -Infinity) return;
+    if (minF === maxF) {
+        minF -= 1;
+        maxF += 1;
+    }
+
+    const margenIzq = 40;
+    const margenDer = 10;
+    const margenSup = 10;
+    const margenInf = 20;
+
+    const anchoUtil = w - margenIzq - margenDer;
+    const altoUtil = h - margenSup - margenInf;
+
+    // grid horizontal
+    ctx.strokeStyle = "#333";
+    ctx.fillStyle = "#aaa";
+    ctx.lineWidth = 1;
+    const divisiones = 4;
+    for (let i = 0; i <= divisiones; i++) {
+        const t = i / divisiones;
+        const y = margenSup + t * altoUtil;
+        ctx.beginPath();
+        ctx.moveTo(margenIzq, y);
+        ctx.lineTo(w - margenDer, y);
+        ctx.stroke();
+
+        const valor = maxF - t * (maxF - minF);
+        ctx.fillText(valor.toFixed(0), 5, y + 4);
+    }
+
+    // ejes
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(margenIzq, margenSup);
+    ctx.lineTo(margenIzq, margenSup + altoUtil);
+    ctx.lineTo(w - margenDer, margenSup + altoUtil);
+    ctx.stroke();
+
+    // funciones auxiliares
+    const totalGen = mejorFitnessHistorial.length;
+    const xParaGen = (i) => {
+        if (totalGen <= 1) return margenIzq;
+        return margenIzq + (i / (totalGen - 1)) * anchoUtil;
+    };
+    const yParaFitness = (f) => {
+        const t = (f - minF) / (maxF - minF);
+        return margenSup + (1 - t) * altoUtil;
+    };
+
+
+    // linea del mejor fitness (verde)
+    ctx.strokeStyle = "#00ff88";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < totalGen; i++) {
+        const x = xParaGen(i);
+        const y = yParaFitness(mejorFitnessHistorial[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+
+
+    // linea del promedio (naranja)
+    ctx.strokeStyle = "#ffa500";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < totalGen; i++) {
+        const x = xParaGen(i);
+        const y = yParaFitness(promedioFitnessHistorial[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    
+    // leyenda
+    ctx.fillStyle = "#00ff88";
+    ctx.fillRect(margenIzq, margenSup, 10, 4);
+    ctx.fillStyle = "#eee";
+    ctx.fillText("Mejor", margenIzq + 15, margenSup + 5);
+
+    ctx.fillStyle = "#ffa500";
+    ctx.fillRect(margenIzq + 60, margenSup, 10, 4);
+    ctx.fillStyle = "#eee";
+    ctx.fillText("Promedio", margenIzq + 75, margenSup + 5);
+}
+
+// exporta el mejor individuo y el historial a un JSON descargable
+function exportBestJson() {
+    if (!gaEntrenado || !gaMejorGenoma) {
+        alert("Primero entrene el GA con 'Probar Algoritmo'.");
+        return;
+    }
+    const data = {
+        game: "Arkanoid-GA",
+        representation: "vector_pesos_lineal",
+        num_genes: NUM_GENES,
+        genes: gaMejorGenoma.genes,
+        fitness: gaMejorGenoma.fitness,
+        ga_params: {
+            populationSize: populationSize,
+            generations: N_Generations,
+            mutationRate: MutationRate,
+            selectionPercent: selectionPercent,
+            crossoverPercent: crossoverPercent,
+            mutationPercent: mutationPercentUI,
+            fpsSim: GA_FPS,
+            episodesPerIndividual: EpisodiosPorIndividuo,
+            seedInicial: gaSEED_inicial >>> 0,
+            seedFinal: GA_SEED >>> 0
+        },
+        fitness_history: {
+            best: mejorFitnessHistorial,
+            avg: promedioFitnessHistorial
+        }
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json"
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -777,8 +845,241 @@ function exportBestJson() {
     URL.revokeObjectURL(url);
 }
 
+
+
+//-----------------------------------
+// 9. Botones e interfaz de usuario
+//-----------------------------------
+
+// aqui definimos la politica greedy baseline para comparar con el GA
+// y los botones para probar el algoritmo genetico en el juego real
+// en este caso el boton de probar algoritmo inicia el entrenamiento del GA
+// probar greedy ejecuta la politica greedy en el juego real y mide lo que es la base de comparacion (baseline heuristica)
+// mejor demo ejecuta el mejor individuo entrenado en el juego real
+// y por ultimo descargar demo descarga el mejor individuo entrenado en un JSON
+
+// politica greedy baseline: mover barra hacia la bola
+function politicaGreedy(ent) {
+    const barraCentro = ent.barra.x + ent.barra.width / 2;
+    const objetivoX = ent.bola.x;
+    const margen = 5; // margen de tolerancia en pixeles
+
+    if (objetivoX < barraCentro - margen) return -1; // mover izquierda
+    if (objetivoX > barraCentro + margen) return 1;  // mover derecha
+    return 0;                                       // sin moverse
+}
+
+function politicaGA(individuo, ent) {
+    const features = obtenerFeaturesDesdeEntorno(ent);
+    return decidirAccion(individuo.genes, features);
+}
+
+// evalua una politica (greedy o GA) en varios episodios y devuelve estadisticas
+function evaluarPolitica(politicaFn, genesOpcionales = null, episodios = 5) {
+    let sumaFitness = 0;
+    let sumaBricks = 0;
+    let sumaRebotes = 0;
+    let sumaSuperv = 0;
+    let sumaDist = 0;
+    let sumaCombo = 0;
+
+    const numEp = Math.max(1, episodios);
+
+    for (let ep = 0; ep < numEp; ep++) {
+        const ent = crearEntornoSimulado();
+
+        let pasos = 0;
+        let bricksRotosSim = 0;
+        let rebotesEnBarra = 0;
+        let sumaDistanciaX = 0;
+        let vivo = true;
+
+        let bricksSeguidosSinBarra = 0;
+        let maxBricksSeguidosSinBarra = 0;
+
+        while (pasos < Max_steps && vivo) {
+            // accion segun la politica
+            const accion = genesOpcionales
+                ? politicaFn(genesOpcionales, ent)
+                : politicaFn(ent);
+
+            // mover barra
+            ent.barra.x += accion * ent.barra.speed * DT_SIM;
+            if (ent.barra.x < 0) ent.barra.x = 0;
+            if (ent.barra.x + ent.barra.width > canvas.width) {
+                ent.barra.x = canvas.width - ent.barra.width;
+            }
+
+            // distancia en X barra-bola
+            const barraCentro = ent.barra.x + ent.barra.width / 2;
+            const distX = Math.abs(ent.bola.x - barraCentro);
+            sumaDistanciaX += distX;
+
+            // mover bola
+            ent.bola.x += ent.bola.vx * DT_SIM;
+            ent.bola.y += ent.bola.vy * DT_SIM;
+
+            // paredes / techo
+            if (ent.bola.x - ent.bola.radius < 0) {
+                ent.bola.x = ent.bola.radius;
+                ent.bola.vx *= -1;
+            } else if (ent.bola.x + ent.bola.radius > canvas.width) {
+                ent.bola.x = canvas.width - ent.bola.radius;
+                ent.bola.vx *= -1;
+            }
+
+            if (ent.bola.y - ent.bola.radius < 0) {
+                ent.bola.y = ent.bola.radius;
+                ent.bola.vy *= -1;
+            }
+
+            // fondo
+            if (ent.bola.y - ent.bola.radius > canvas.height) {
+                vivo = false;
+            }
+
+            // barra
+            if (circleIntersectsRect(ent.bola, ent.barra)) {
+                ent.bola.y = ent.barra.y - ent.bola.radius;
+                ent.bola.vy *= -1;
+
+                const hitPos =
+                    (ent.bola.x - (ent.barra.x + ent.barra.width / 2)) /
+                    (ent.barra.width / 2);
+                ent.bola.vx = hitPos * ent.bola.speed;
+
+                rebotesEnBarra++;
+                bricksSeguidosSinBarra = 0; // se corta el combo
+            }
+
+            // ladrillos
+            for (const brick of ent.bricks) {
+                if (!brick.alive) continue;
+                if (circleIntersectsRect(ent.bola, brick)) {
+                    brick.alive = false;
+                    bricksRotosSim++;
+                    ent.bola.vy *= -1;
+
+                    bricksSeguidosSinBarra++;
+                    if (bricksSeguidosSinBarra > maxBricksSeguidosSinBarra) {
+                        maxBricksSeguidosSinBarra = bricksSeguidosSinBarra;
+                    }
+
+                    break;
+                }
+            }
+
+            // si no queda ningun ladrillo, se termina el episodio
+            if (ent.bricks.every(b => !b.alive)) {
+                vivo = false;
+            }
+
+            pasos++;
+        }
+
+        const pasosAlcanzados = Math.max(1, pasos);
+        const distProm = sumaDistanciaX / pasosAlcanzados;
+        const ratioSuperv = pasosAlcanzados / Max_steps;
+        const distNorm = distProm / canvas.width;
+
+        const fitnessEp = calcularFitnessDesdeEstadistcias(
+            bricksRotosSim,
+            rebotesEnBarra,
+            ratioSuperv,
+            distNorm,
+            maxBricksSeguidosSinBarra
+        );
+
+        sumaFitness += fitnessEp;
+        sumaBricks += bricksRotosSim;
+        sumaRebotes += rebotesEnBarra;
+        sumaSuperv += ratioSuperv;
+        sumaDist += distNorm;
+        sumaCombo += maxBricksSeguidosSinBarra;
+    }
+
+    return {
+        fitnessProm: sumaFitness / numEp,
+        bricksProm: sumaBricks / numEp,
+        rebotesProm: sumaRebotes / numEp,
+        supervProm: sumaSuperv / numEp,
+        distProm: sumaDist / numEp,
+        comboProm: sumaCombo / numEp
+    };
+}
+
+function mostrarResultadosAgente(prefijo, resultados) {
+    const setText = (id, valor) => {
+        const el = document.getElementById(id);
+        if (el && !isNaN(valor)) {
+            el.textContent = valor.toFixed(2);
+        }
+    };
+
+    setText(prefijo + "Fitness", resultados.fitnessProm);
+    setText(prefijo + "Bricks", resultados.bricksProm);
+    setText(prefijo + "Rebotes", resultados.rebotesProm);
+    setText(prefijo + "Superv", resultados.supervProm);
+    setText(prefijo + "Dist", resultados.distProm);
+
+    const comboEl = document.getElementById(prefijo + "Combo");
+    if (comboEl && !isNaN(resultados.comboProm)) {
+        comboEl.textContent = resultados.comboProm.toFixed(2);
+    }
+}
+
+// referencias a botones
+const btnGA = document.getElementById("btnProbarAlgoritmo");
+const btnProbarGreedy = document.getElementById("btnProbarGreedy");
+const btnMejorDemo = document.getElementById("btnMejorDemo");
+const btnDescargarDemo = document.getElementById("btnDescargarDemo");
+
+// alias para que validarPorcentajes pueda usarlos
+const btnGreedy = btnProbarGreedy;
+const btnDemo = btnMejorDemo;
+const btnDesc = btnDescargarDemo;
+
+// Probar Algoritmo: entrena el GA (offline en el simulador)
+if (btnGA) {
+    btnGA.addEventListener("click", () => {
+        console.log("Click en Probar Algoritmo (entrenando GA)...");
+        ejecutarAlgoritmoGenetico();
+    });
+} else {
+    console.warn("No se encontro #btnProbarAlgoritmo en el DOM");
+}
+
+// Probar Greedy: evalua la heuristica baseline y actualiza panel izquierdo
+if (btnProbarGreedy) {
+    btnProbarGreedy.addEventListener("click", () => {
+        const resGreedy = evaluarPolitica(politicaGreedy, null, 5);
+        mostrarResultadosAgente("greedy", resGreedy);
+    });
+}
+
+// Mejor Demo: usa el mejor individuo del GA y lanza la demo
+if (btnMejorDemo) {
+    btnMejorDemo.addEventListener("click", () => {
+        if (!gaEntrenado || !gaMejorGenoma) {
+            alert("Primero entrene el GA con 'Probar Algoritmo'.");
+            return;
+        }
+
+        // calculamos estadisticas del mejor individuo
+        const resGA = evaluarPolitica(politicaGA, gaMejorGenoma, 5);
+        mostrarResultadosAgente("ga", resGA);
+
+        // Reiniciamos el juego y dejamos que el GA controle la barra
+        resetGame();
+        modoGA = true;
+        gameRunning = true;
+    });
+}
+
+// Descargar Demo: guarda best.json con el mejor individuo y el historial
 if (btnDescargarDemo) {
     btnDescargarDemo.addEventListener("click", exportBestJson);
 }
 
-
+// inicializamos la validacion de porcentajes una vez que ya existen los botones
+initPorcentajes();

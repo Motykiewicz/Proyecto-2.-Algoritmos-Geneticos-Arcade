@@ -20,10 +20,6 @@
                 <input type="number" id="inputGenerations" value="1000" min="50" max="5000" style="width:70px;">
             </label>
             <label>
-                Tamaño torneo:
-                <input type="number" id="inputTorneo" value="3" min="2" max="10" style="width:60px;">
-            </label>
-            <label>
                 Seed:
                 <input type="number" id="inputSeed" value="12345" style="width:80px;">
             </label>
@@ -60,6 +56,7 @@
         <button id="btnReset">Reset</button>
 
         <button id="btnProbarAlgoritmo">Probar Algoritmo</button>
+        <button id="btnProbarGreedy">Probar Greedy</button>
         <button id="btnMejorDemo" disabled>Mejor Demo</button>
         <button id="btnDescargarDemo" disabled>Descargar Demo</button>
 
@@ -81,8 +78,32 @@
             <span> Tiempo por generacion: <span id="etiquetaTiempoGen">0</span> </span>
         </div>   
     </div>
+    <div id="zonaJuego">
+        <!-- Panel Greedy a la izquierda -->
+        <div class="panel-agente">
+            <h3>Greedy (heuristica baseline)</h3>
+            <p>Fitness promedio: <span id="greedyFitness">-</span></p>
+            <p>Ladrillos rotos promedio: <span id="greedyBricks">-</span></p>
+            <p>Rebotes en barra promedio: <span id="greedyRebotes">-</span></p>
+            <p>Supervivencia promedio (0–1): <span id="greedySuperv">-</span></p>
+            <p>Distancia promedio X (0–1): <span id="greedyDist">-</span></p>
+            <p>Max. combo ladrillos sin barra: <span id="greedyCombo">-</span></p>
+        </div>
 
-    <canvas id="gameCanvas" width="480" height="640"></canvas>
+        <div id="gameWrapper">
+            <canvas id="gameCanvas" width="480" height="640"></canvas>
+        </div>
+
+        <div class="panel-agente">
+            <h3>Algoritmo Genético (mejor individuo)</h3>
+            <p>Fitness promedio: <span id="gaFitness">-</span></p>
+            <p>Ladrillos rotos promedio: <span id="gaBricks">-</span></p>
+            <p>Rebotes en barra promedio: <span id="gaRebotes">-</span></p>
+            <p>Supervivencia promedio (0–1): <span id="gaSuperv">-</span></p>
+            <p>Distancia promedio X (0–1): <span id="gaDist">-</span></p>
+            <p>Máx. combo ladrillos sin barra: <span id="gaCombo">-</span></p>
+        </div>
+    </div>
 
     <script src="game.js"></script>
     <script src="algoritmoGen.js"></script>
